@@ -6,45 +6,63 @@ Multilingual automated subtitle generator for short-form video creators (YouTube
 
 ---
 
-## Quick start — local dev
+## Quick start
 
-### Prerequisites
+### macOS / Linux — two commands
 
-| OS | Install |
-|---|---|
-| **macOS** | `brew install python@3.12 node ffmpeg redis && brew services start redis` |
-| **Windows** | Python 3.12, Node 20+, [Memurai](https://www.memurai.com/get-memurai) (Redis port) |
-| **Linux** | `sudo apt install python3.12 python3.12-venv nodejs npm ffmpeg redis-server` |
-
-### Backend
+Requires [Homebrew](https://brew.sh) on macOS, or apt on Linux. Then:
 
 ```bash
+git clone https://github.com/Ripple1011/AutoSubsVideo.git autosub
+cd autosub
+make setup    # installs system deps + venv + npm install
+make run      # starts FastAPI :8000 + Vite :5173
+```
+
+Open [http://localhost:5173](http://localhost:5173). Paste your Gemini API key in the **⚙ Settings** modal (stored in browser, never on disk).
+
+Other useful targets: `make api`, `make web`, `make worker`, `make clean`. Run `make help` to list them.
+
+### Windows
+
+Make isn't installed by default on Windows. Use the manual steps below.
+
+#### Prerequisites
+
+- Python 3.12 ([python.org](https://www.python.org/downloads/))
+- Node 20+ ([nodejs.org](https://nodejs.org))
+- [Memurai](https://www.memurai.com/get-memurai) (Redis-compatible Windows service) — only needed if you want the Celery async path
+
+#### Backend
+
+```powershell
 cd backend
-python3.12 -m venv .venv
-source .venv/bin/activate           # Windows: .venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                # add your GEMINI_API_KEY etc.
+copy .env.example .env             # add your GEMINI_API_KEY etc.
 uvicorn app.main:app --port 8000 --reload
 ```
 
-### Frontend
+#### Frontend
 
-```bash
+```powershell
 cd frontend
 npm install
-npm run dev                         # http://localhost:5173
+npm run dev                        # http://localhost:5173
 ```
 
-### Optional — Celery worker (async pipeline)
+#### Optional — Celery worker
 
-Only needed if `CELERY_ENABLED=true` in `backend/.env`. Otherwise the pipeline runs inline in FastAPI.
+Only needed if `CELERY_ENABLED=true` in `backend/.env`.
 
-```bash
+```powershell
 cd backend
-source .venv/bin/activate
-celery -A app.tasks worker -c 1 --loglevel=info
-# Windows: add `-P solo` flag
+.venv\Scripts\activate
+celery -A app.tasks worker -c 1 -P solo --loglevel=info
 ```
+
+The `-P solo` flag is Windows-only (Celery's default `prefork` pool requires `os.fork()`).
 
 ---
 
