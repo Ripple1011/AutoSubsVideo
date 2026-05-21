@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: #0b0b0f;
+  color: #f5f5f7;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Subtitle entrance animations. Duration is controlled per-instance via
+   the `--anim-duration` custom property set on the element. */
+
+@keyframes autosub-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes autosub-slide {
+  from { opacity: 0; transform: translateY(40%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes autosub-pop {
+  0%   { opacity: 0; transform: scale(0.55); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.autosub-anim-fade  { animation: autosub-fade  var(--anim-duration, 280ms) ease-out both; }
+.autosub-anim-slide { animation: autosub-slide var(--anim-duration, 280ms) cubic-bezier(.2,.8,.2,1) both; }
+.autosub-anim-pop   { animation: autosub-pop   var(--anim-duration, 320ms) cubic-bezier(.2,.8,.2,1) both; }

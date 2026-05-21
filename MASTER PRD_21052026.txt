@@ -1,0 +1,86 @@
+PART 1: THE MASTER PRD (The Source of Truth)
+1. Executive Summary & Product Scope
+Product Name: AutoSub (Working Title)
+
+Core Utility: A professional, responsive web application that accepts video uploads (max 10 minutes for personal use, throttled to 90 seconds for future SaaS tiers) and auto-generates stylized, animated subtitles synchronized with speech.
+
+Target Target Audience: Individual short-form video creators (YouTube Shorts, Instagram Reels, TikTok).
+
+Languages Supported: English, Hindi, Gujarati.
+
+2. Finalized Technology Stack
+Frontend Interface: React with TailwindCSS (Provides premium, instantaneous visual editing and responsive canvas states).
+
+Backend API Gateway: FastAPI (Python-based, asynchronous by design to smoothly handle file uploads and streaming tasks without blocking the server).
+
+AI Transcription Engine: Cloud-based OpenAI Whisper API / Groq (Bypasses Hostinger CPU bottlenecks to achieve sub-10 second multilingual transcriptions).
+
+Video Processing Library: MoviePy / FFmpeg (Used for lightweight audio extraction on intake and complex frame rendering on video export).
+
+Server Architecture Environment: Hosted on a Hostinger KVM 2 Plan (2 vCPU, 8GB RAM, pure Ubuntu/Linux OS environment).
+
+Asynchronous Processing: Celery + Redis (Enforces a background process queue so the server handles video rendering tasks one after another cleanly without crashing).
+
+3. App Architecture & File Structure
+Plaintext
+autosub-root/
+├── backend/                  # FastAPI Application
+│   ├── app/
+│   │   ├── main.py           # Core API Endpoints
+│   │   ├── video_worker.py   # MoviePy / FFmpeg rendering logic
+│   │   ├── whisper_client.py # Cloud API integration
+│   │   └── tasks.py          # Celery background job worker
+│   ├── requirements.txt      # Python backend packages
+│   └── Dockerfile
+├── frontend/                 # React Application
+│   ├── src/
+│   │   ├── components/       # VideoCanvas, SubtitleSidebar, ColorPicker
+│   │   ├── App.jsx           # Main Dashboard Layout
+│   │   └── main.jsx
+│   ├── package.json
+│   └── tailwind.config.js
+└── CLAUDE.md                 # System directions for Claude Code Agent
+4. Feature Specifications & User Experience (UI/UX)
+The interface is a unified dashboard built using a Social Media First Split View:
+
+A. The Setup State
+A clean workspace featuring a drag-and-drop zone welcoming .mp4 and .mov files.
+
+A dropdown selection menu to specify the spoken language (Defaulting to "Auto-Detect", alongside hard options for English, Hindi, and Gujarati).
+
+A single, CTA button designated as "Generate Subtitles".
+
+B. The Interactive Workspace State
+Once the transcription cloud API returns the JSON timestamps, the page shifts instantly to an advanced interactive suite consisting of two equal columns:
+
+Left Column (Interactive Subtitle Script Editor):
+
+Displays the transcription split line-by-line or word-by-word with accompanying exact start/end timestamps.
+
+The text is fully interactive; users can click directly into any text block to fix misspelled Indian names, Gujarati grammar, or Hindi phonetics.
+
+Clicking on a specific word forces the video preview on the right column to scrub immediately to that exact video frame.
+
+Right Column (The Vertical Preview Canvas):
+
+A centered vertical player window mirroring a standard mobile screen ratio (9:16 vertical phone layout).
+
+The Crucial Transparent Overlay Layer: A specialized, borderless text container placed on top of the native HTML5 video frame. Changes made in the design controls alter the styling of this text block instantly without server interaction.
+
+C. The Design Control Sidebar
+Provides intuitive dashboard sliders and inputs allowing granular configuration:
+
+Fonts: Dropdown pulling popular high-impact creator fonts (Impact, Montserrat Black, Poppins Bold).
+
+Colors: Hexadecimal color blocks targeting Text Color, Text Outlines, and Text Background Highlight boxes.
+
+Scale: Numeric slider adjustments to dynamically change subtitle text sizing.
+
+Vertical Alignment: Three preset structural choices allowing text positioning to drop safely at the Top, Center, or Bottom.
+
+D. The Output Delivery Modes
+Users are given two distinctive methods to extract their completed short-form video content:
+
+Soft Subtitle Export (Free/Fast Tier): Instantaneous extraction download package bundling the unmodified original video alongside a custom formatted .srt or .vtt file.
+
+Hard Subtitle Export (Pro/Premium Tier): The React frontend compiles the style choices (Hex colors, font sizes, alignment coordinates, text text adjustments) into a lightweight JSON schema package and posts it back to FastAPI. FastAPI routes this to the Celery worker queue where FFmpeg burns those exact font variations directly into the video frames.

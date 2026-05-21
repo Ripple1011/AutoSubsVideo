@@ -1,0 +1,30 @@
+# AutoSub backend — Python 3.11+
+# Pins reviewed for Hostinger KVM 2 (2 vCPU / 8 GB Ubuntu). No local AI inference.
+
+# --- Web framework -------------------------------------------------------
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18          # required by FastAPI for UploadFile
+
+# --- Config / validation -------------------------------------------------
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# --- Async queue ---------------------------------------------------------
+celery==5.4.0
+redis==5.2.1                      # Celery broker + result backend client
+
+# --- Cloud ASR HTTP ------------------------------------------------------
+httpx==0.28.1                     # raw client for Groq + OpenAI Whisper endpoints
+                                  # (avoids pulling full openai/groq SDKs and their deps)
+
+# --- Video / audio I/O ---------------------------------------------------
+moviepy==1.0.3                    # stable 1.x line; 2.x changed import paths
+                                  # FFmpeg binary must be installed at OS level
+
+# --- Text segmentation --------------------------------------------------
+regex==2024.11.6                  # Unicode \X grapheme clusters for Devanagari /
+                                  # Gujarati syllable-weight proportional splitting
+
+# --- Dev / runtime utility ----------------------------------------------
+python-dotenv==1.0.1              # picked up transitively by pydantic-settings
