@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .config import get_settings
 from .storage import (
@@ -149,6 +150,31 @@ async def job_status(job_id: str):
     if not state:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     return state
+
+
+@app.get("/jobs/{job_id}/video")
+async def job_video(job_id: str):
+    """Stream the original uploaded video file for a job. Used by the
+    frontend to restore the workspace after a page refresh — the segments
+    already live in the job JSON, but the <video> element needs a URL
+    pointing at the source bytes.
+    """
+    state = read_job(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    folder = upload_dir(job_id)
+    # Source files land at `source.<ext>` where ext was the original upload
+    # suffix; pick whichever allowed extension exists on disk.
+    candidates = [
+        p for p in folder.glob("source.*")
+        if p.suffix.lower() in ALLOWED_EXTENSIONS
+    ]
+    if not candidates:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Source video missing for job '{job_id}'.",
+        )
+    return FileResponse(candidates[0])
 
 
 @app.post("/export/soft")
