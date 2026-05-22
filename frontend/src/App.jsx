@@ -134,7 +134,7 @@ export default function App() {
               ＋ New Video
             </button>
           )}
-          {inWorkspace && <ExportMenu jobId={jobId} />}
+          {inWorkspace && <ExportMenu jobId={jobId} styleSchema={styleSchema} />}
           <RecentVideosMenu
             currentJobId={jobId}
             onPick={handlePickRecent}

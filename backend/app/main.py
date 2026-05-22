@@ -23,6 +23,7 @@ from .storage import (
     write_job,
 )
 from .pipeline import run_pipeline
+from .video_worker import burn_subtitles
 from .whisper_client import resolve_credentials, PROVIDER_MODELS
 
 app = FastAPI(title="AutoSub API")
@@ -262,6 +263,46 @@ def _to_vtt(segments: list[dict]) -> str:
 
 
 @app.post("/export/hard")
-async def export_hard(job_id: str, style_schema: dict):
-    """Enqueue Celery burn_subtitles task with frontend style schema."""
-    raise NotImplementedError
+def export_hard(job_id: str, style_schema: dict):
+    """Burn the styled subtitles into the source video and return the mp4.
+
+    Sync def on purpose — FastAPI runs sync handlers on its threadpool, so
+    the blocking FFmpeg subprocess doesn't stall the event loop, and the
+    CLAUDE.md 'one concurrent render' resource discipline holds naturally.
+
+    Renders into data/uploads/{job_id}/burned.mp4 and serves that file. Re-
+    requests overwrite (deterministic for a given style + segments).
+    """
+    state = read_job(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    segments = state.get("segments") or []
+    if not segments:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job '{job_id}' has no segments yet (status: {state.get('status')}).",
+        )
+
+    folder = upload_dir(job_id)
+    sources = [
+        p for p in folder.glob("source.*")
+        if p.suffix.lower() in ALLOWED_EXTENSIONS
+    ]
+    if not sources:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Source video missing for job '{job_id}'.",
+        )
+
+    out_path = folder / "burned.mp4"
+    try:
+        burn_subtitles(str(sources[0]), segments, style_schema, str(out_path))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    base = Path(state.get("filename") or job_id).stem
+    return FileResponse(
+        out_path,
+        media_type="video/mp4",
+        filename=f"{base} (subs).mp4",
+    )
