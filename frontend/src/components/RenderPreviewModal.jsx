@@ -1,0 +1,83 @@
+import { useEffect, useRef } from 'react'
+
+/**
+ * Full-screen modal that plays the just-rendered burn-in mp4 with native
+ * <video> controls. Because the subtitles are baked into the video pixels,
+ * the browser's built-in fullscreen button works as expected (no overlay
+ * to lose) — the chief reason this modal exists rather than reusing the
+ * live VideoCanvas overlay.
+ *
+ * Caller is responsible for creating + revoking the blob URL. The modal
+ * itself is presentational: it just renders the video + footer actions.
+ */
+export default function RenderPreviewModal({ open, videoUrl, filename, onDownload, onClose }) {
+  const videoRef = useRef(null)
+
+  // ESC key closes. Re-binds whenever the modal opens.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  // Autoplay on open. The browser may block sound; that's fine — user can
+  // click play. We don't force muted because they probably want the audio.
+  useEffect(() => {
+    if (open && videoRef.current) videoRef.current.play().catch(() => {})
+  }, [open, videoUrl])
+
+  if (!open) return null
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 bg-black/85 flex flex-col items-center justify-center p-6"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[min(96vw,1100px)] max-h-[min(92vh,900px)] flex flex-col bg-[#0f0f15] rounded-xl overflow-hidden border border-white/10 shadow-2xl"
+      >
+        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-sm text-white truncate">{filename || 'Burned video preview'}</div>
+            <div className="text-[11px] text-white/40">Subtitles are baked into the frames — fullscreen shows them.</div>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-lg leading-none px-2">
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 flex items-center justify-center bg-black">
+          {videoUrl ? (
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              controls
+              controlsList="nodownload"
+              className="max-w-full max-h-full"
+            />
+          ) : (
+            <div className="text-white/40 text-sm">No video to preview.</div>
+          )}
+        </div>
+
+        <div className="px-4 py-3 border-t border-white/10 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded bg-white/5 hover:bg-white/10 text-white/80"
+          >
+            Close
+          </button>
+          <button
+            onClick={onDownload}
+            disabled={!videoUrl}
+            className="px-4 py-2 text-sm rounded bg-purple-500 hover:bg-purple-400 disabled:opacity-40 text-white font-medium"
+          >
+            ↓ Download
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

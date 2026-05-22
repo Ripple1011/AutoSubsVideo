@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
+import RenderPreviewModal from './RenderPreviewModal'
 
 /**
  * Header dropdown offering SRT / VTT sidecar downloads plus a burned-in
  * .mp4 render. Sidecars are anchor hrefs (browser handles download via
- * Content-Disposition). The burn is a POST with the live style schema
- * and a busy state covering the FFmpeg pass.
+ * Content-Disposition). The burn is a POST with the live style schema;
+ * on success the resulting mp4 is shown in RenderPreviewModal so the
+ * user can review (and use native fullscreen, which works because the
+ * subtitles are baked into the pixels) before deciding to download.
  */
 export default function ExportMenu({ jobId, styleSchema }) {
   const [open, setOpen] = useState(false)
   const [burning, setBurning] = useState(false)
   const [error, setError] = useState(null)
+  // Preview state — set after a successful burn. Holds the blob URL and
+  // the filename extracted from Content-Disposition.
+  const [preview, setPreview] = useState(null)   // { url, filename } | null
   const wrapperRef = useRef(null)
 
   useEffect(() => {
@@ -20,6 +26,12 @@ export default function ExportMenu({ jobId, styleSchema }) {
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
+
+  // Revoke the blob URL on unmount or when a new preview replaces it.
+  // Without this, every successful render leaks a multi-MB blob in memory.
+  useEffect(() => {
+    return () => { if (preview?.url) URL.revokeObjectURL(preview.url) }
+  }, [preview])
 
   if (!jobId) return null
 
@@ -39,25 +51,34 @@ export default function ExportMenu({ jobId, styleSchema }) {
         throw new Error(detail.detail || `HTTP ${res.status}`)
       }
       const blob = await res.blob()
-      // FastAPI's FileResponse sets Content-Disposition with `filename=...`
-      // — extract it so the download keeps the user's original name + (subs).
       const cd = res.headers.get('content-disposition') || ''
       const match = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i)
       const filename = match ? decodeURIComponent(match[1]) : 'burned.mp4'
+      // Release any previous preview before allocating the new blob URL.
+      if (preview?.url) URL.revokeObjectURL(preview.url)
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      setPreview({ url, filename })
       setOpen(false)
     } catch (e) {
       setError(e.message)
     } finally {
       setBurning(false)
     }
+  }
+
+  const handleDownload = () => {
+    if (!preview) return
+    const a = document.createElement('a')
+    a.href = preview.url
+    a.download = preview.filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
+  const handleClose = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url)
+    setPreview(null)
   }
 
   return (
@@ -88,10 +109,10 @@ export default function ExportMenu({ jobId, styleSchema }) {
             className="block w-full text-left px-3 py-2 hover:bg-white/5 text-sm disabled:opacity-50"
           >
             <div className="text-white">
-              {burning ? 'Rendering…' : 'Render video (burned-in)'}
+              {burning ? 'Rendering…' : 'Preview burned video'}
             </div>
             <div className="text-[11px] text-white/40">
-              {burning ? 'FFmpeg is overlaying subtitles' : 'New .mp4 with subtitles on every frame'}
+              {burning ? 'FFmpeg is overlaying subtitles' : 'Render, watch, then download .mp4'}
             </div>
           </button>
           {error && (
@@ -101,6 +122,14 @@ export default function ExportMenu({ jobId, styleSchema }) {
           )}
         </div>
       )}
+
+      <RenderPreviewModal
+        open={Boolean(preview)}
+        videoUrl={preview?.url}
+        filename={preview?.filename}
+        onDownload={handleDownload}
+        onClose={handleClose}
+      />
     </div>
   )
 }
