@@ -44,7 +44,7 @@ import statistics
 from pathlib import Path
 
 from .storage import read_job, write_job
-from .video_worker import extract_audio
+from .video_worker import extract_audio, probe_duration
 from .whisper_client import (
     _is_abbreviation_period,
     distribute_phrases,
@@ -81,6 +81,16 @@ _CONJUNCTIONS_INDIC = {"और", "या", "लेकिन", "क्यों�
 # segments. Songs pass through untouched.
 _MAX_WORDS_PER_CHUNK = 3
 
+# Gemini occasionally returns per-word timestamps that collapse into a tiny
+# window at the start of the audio (e.g., a 67-second song with every word
+# stamped between 0.14s and 0.41s). When that happens the subtitle overlay
+# flashes and is gone before playback advances a half-second. Detect by
+# comparing the model-reported word span to the actual audio length; below
+# this ratio we treat the timestamps as untrusted and redistribute words
+# uniformly across the real duration. 0.5 is a generous threshold — any
+# song with vocals filling >50% of the audio remains above it.
+_COLLAPSED_SPAN_RATIO = 0.5
+
 
 async def run_pipeline(
     job_id: str,
@@ -103,6 +113,7 @@ async def run_pipeline(
         write_job(state)
         audio_path = src.parent / "audio.wav"
         extract_audio(str(src), str(audio_path), start_offset=state.get("start_offset", 0.0))
+        audio_duration = probe_duration(str(audio_path))
 
         state["status"] = "transcribing"
         write_job(state)
@@ -119,7 +130,8 @@ async def run_pipeline(
         # scratch; other providers return native segments → use the legacy
         # punctuation splitter with proportional timing.
         if "words" in result:
-            segments = _build_segments_from_words(result["words"])
+            words = _repair_collapsed_word_timestamps(result["words"], audio_duration)
+            segments = _build_segments_from_words(words)
         else:
             segments = _split_at_natural_boundaries(result.get("segments", []))
         offset = float(state.get("start_offset") or 0.0)
@@ -140,6 +152,42 @@ async def run_pipeline(
         state["error"] = str(e)
         write_job(state)
         raise
+
+
+def _repair_collapsed_word_timestamps(
+    words: list[dict],
+    audio_duration: float,
+) -> list[dict]:
+    """When Gemini returns per-word timestamps clustered into a tiny window
+    (a known failure mode for sung audio), redistribute word timings
+    uniformly across the real audio duration. Word order, text, speaker,
+    is_song, and phrase_end are preserved — only `start` and `end` change.
+
+    No-op when timestamps already span a reasonable fraction of the audio.
+    """
+    if not words or audio_duration <= 0:
+        return words
+    span = max(w["end"] for w in words) - min(w["start"] for w in words)
+    if span >= audio_duration * _COLLAPSED_SPAN_RATIO:
+        return words
+
+    # Collapsed — redistribute. Each word gets an equal slot. We keep all
+    # other fields (speaker, is_song, phrase_end) verbatim.
+    n = len(words)
+    slot = audio_duration / n
+    repaired: list[dict] = []
+    for i, w in enumerate(words):
+        nw = dict(w)
+        nw["start"] = round(i * slot, 3)
+        nw["end"] = round((i + 1) * slot, 3)
+        repaired.append(nw)
+    print(
+        f"[pipeline] collapsed timestamps detected "
+        f"(model span={span:.2f}s, audio={audio_duration:.2f}s); "
+        f"redistributed {n} words uniformly.",
+        flush=True,
+    )
+    return repaired
 
 
 def _build_segments_from_words(words: list[dict]) -> list[dict]:
@@ -187,11 +235,38 @@ def _build_segments_from_words(words: list[dict]) -> list[dict]:
                 "words": chunk,
             })
 
-    # 3. Aalaap fill — only between consecutive segments. No audio-end fudge.
+    # 3. Aalaap fill — extend ONLY line-end song chunks (those whose final
+    # word has phrase_end=true). Intra-line sub-chunks keep their natural
+    # tight end-times so they flow into the next sub-chunk without lingering
+    # past the next subtitle's appearance.
     for i in range(len(out) - 1):
-        if out[i].get("is_song") and out[i + 1]["start"] > out[i]["end"]:
+        if not out[i].get("is_song"):
+            continue
+        last_word = out[i]["words"][-1] if out[i].get("words") else None
+        if not (last_word and last_word.get("phrase_end")):
+            continue
+        if out[i + 1]["start"] > out[i]["end"]:
             out[i]["end"] = out[i + 1]["start"]
     return out
+
+
+def _balanced_cap_split(line: list[dict], cap: int) -> list[list[dict]]:
+    """Split a single line into ceil(N/cap) balanced sub-chunks of <= `cap`
+    words. Earlier chunks absorb the remainder so we never produce orphan
+    tail words: 5 → 3+2, 7 → 3+2+2, 8 → 3+3+2.
+    """
+    n = len(line)
+    if n <= cap:
+        return [line]
+    num_chunks = (n + cap - 1) // cap   # ceil(n / cap)
+    base, extra = divmod(n, num_chunks)
+    sub: list[list[dict]] = []
+    i = 0
+    for k in range(num_chunks):
+        size = base + (1 if k < extra else 0)
+        sub.append(line[i : i + size])
+        i += size
+    return sub
 
 
 def _split_at_natural_boundaries(segments: list[dict]) -> list[dict]:
@@ -237,13 +312,16 @@ def _split_at_natural_boundaries(segments: list[dict]) -> list[dict]:
 
 
 def _chunk_words_by_phrase_end(words: list[dict]) -> list[list[dict]]:
-    """Chunk words at Gemini-emitted lyrical-line boundaries.
+    """Chunk words at Gemini-emitted lyrical-line boundaries, then subdivide
+    each line into balanced sub-chunks of at most `_MAX_WORDS_PER_CHUNK`
+    words so a long line displays as multiple subtitles.
 
     Gemini marks `phrase_end=true` on the last word of each natural display
-    phrase (lyrical line for songs). One segment per such phrase — same shape
-    as the first aalaap-fix version, where Gemini chose segment boundaries.
-    Falls back to adaptive gap detection if Gemini omitted phrase_end on every
-    word (e.g., an older model response).
+    phrase (lyrical line). Inside each such line, we apply a balanced cap:
+    a 5-word line becomes 3+2 (not 5 at once); a 7-word line becomes 3+2+2
+    (not 3+3+1 — front-loaded balanced split avoids orphan tail words).
+    Falls back to adaptive gap detection if Gemini omitted phrase_end on
+    every word (e.g., older model response).
     """
     if len(words) <= 1:
         return [words]
@@ -254,10 +332,10 @@ def _chunk_words_by_phrase_end(words: list[dict]) -> list[list[dict]]:
         for w in words:
             bucket.append(w)
             if w.get("phrase_end"):
-                chunks.append(bucket)
+                chunks.extend(_balanced_cap_split(bucket, _MAX_WORDS_PER_CHUNK))
                 bucket = []
         if bucket:
-            chunks.append(bucket)
+            chunks.extend(_balanced_cap_split(bucket, _MAX_WORDS_PER_CHUNK))
         return chunks
 
     # Fallback: adaptive gap detection — held-vowel pauses between lines
