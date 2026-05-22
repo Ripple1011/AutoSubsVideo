@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import VideoCanvas from './components/VideoCanvas'
 import SubtitleSidebar from './components/SubtitleSidebar'
 import DesignControls from './components/DesignControls'
 import SettingsModal from './components/SettingsModal'
 import DropZone from './components/DropZone'
+import RecentVideosMenu from './components/RecentVideosMenu'
 import { api } from './lib/apiClient'
 
 const DEFAULT_STYLE = {
@@ -49,9 +50,23 @@ export default function App() {
   // fresh sessions land directly on the DropZone without a flicker.
   const [restoring, setRestoring] = useState(() => Boolean(localStorage.getItem(LS_JOB)))
 
+  // Load a job from the backend into the workspace. Shared between mount-
+  // time restore and the Recent Videos picker. Throws if the job isn't
+  // in a renderable shape (not ready, no segments).
+  const loadJob = useCallback(async (id) => {
+    const job = await api(`/jobs/${id}`)
+    if (job.status !== 'ready' || !Array.isArray(job.segments) || job.segments.length === 0) {
+      throw new Error('Job not ready')
+    }
+    setSegments(job.segments)
+    setVideoUrl(`/api/jobs/${id}/video`)
+    setJobId(id)
+    setActiveIndex(-1)
+    try { localStorage.setItem(LS_JOB, id) } catch { /* quota */ }
+  }, [])
+
   // Mount-time restore. If a previous jobId is in localStorage, try to
-  // fetch the job; on success, rehydrate segments + point the <video>
-  // at the backend's source. Any failure (404, not ready, network error)
+  // rehydrate via loadJob. Any failure (404, not ready, network error)
   // clears the stale key and lands the user on the DropZone.
   useEffect(() => {
     const saved = localStorage.getItem(LS_JOB)
@@ -59,15 +74,7 @@ export default function App() {
     let cancelled = false
     ;(async () => {
       try {
-        const job = await api(`/jobs/${saved}`)
-        if (cancelled) return
-        if (job.status === 'ready' && Array.isArray(job.segments) && job.segments.length > 0) {
-          setSegments(job.segments)
-          setVideoUrl(`/api/jobs/${saved}/video`)
-          setJobId(saved)
-        } else {
-          localStorage.removeItem(LS_JOB)
-        }
+        await loadJob(saved)
       } catch {
         if (!cancelled) localStorage.removeItem(LS_JOB)
       } finally {
@@ -75,7 +82,7 @@ export default function App() {
       }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [loadJob])
 
   // Persist style on every change. Cheap (small JSON, infrequent edits).
   useEffect(() => {
@@ -100,6 +107,20 @@ export default function App() {
     localStorage.removeItem(LS_JOB)
   }
 
+  const handlePickRecent = async (id) => {
+    if (id === jobId) return  // already showing this one
+    try {
+      await loadJob(id)
+    } catch (e) {
+      alert(`Could not load that job: ${e.message}`)
+    }
+  }
+
+  const handleDeleteRecent = (id) => {
+    // If the user deleted the currently-loaded job, clear the workspace.
+    if (id === jobId) handleNewVideo()
+  }
+
   const inWorkspace = videoUrl !== null
 
   return (
@@ -112,6 +133,11 @@ export default function App() {
               ＋ New Video
             </button>
           )}
+          <RecentVideosMenu
+            currentJobId={jobId}
+            onPick={handlePickRecent}
+            onDelete={handleDeleteRecent}
+          />
           <button className="text-white/60 hover:text-white" onClick={() => setSettingsOpen(true)}>
             ⚙ Settings
           </button>

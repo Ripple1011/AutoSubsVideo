@@ -61,3 +61,48 @@ def read_job(job_id: str) -> dict | None:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def list_jobs(limit: int = 20) -> list[dict]:
+    """Return a compact summary of the most-recent `limit` jobs, sorted
+    newest-first by file mtime. Each item is small enough to render in a
+    dropdown menu — no segments, no transcripts, just enough to identify
+    the job. Malformed JSON files are skipped silently.
+    """
+    if not JOBS.exists():
+        return []
+    paths = sorted(
+        JOBS.glob("*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:max(1, limit)]
+    out: list[dict] = []
+    for p in paths:
+        try:
+            state = json.loads(p.read_text())
+        except Exception:
+            continue
+        out.append({
+            "id": state.get("id"),
+            "filename": state.get("filename"),
+            "created_at": state.get("created_at"),
+            "status": state.get("status"),
+            "language": state.get("language"),
+            "num_segments": len(state.get("segments") or []),
+        })
+    return out
+
+
+def delete_job(job_id: str) -> bool:
+    """Remove a job's state file and its entire upload folder (source video
+    + derived audio). Returns True if the job state existed before deletion,
+    False if it didn't (idempotent). Filesystem errors propagate up.
+    """
+    import shutil
+    state_path = job_path(job_id)
+    folder = UPLOADS / job_id
+    existed = state_path.exists()
+    if folder.exists():
+        shutil.rmtree(folder)
+    state_path.unlink(missing_ok=True)
+    return existed

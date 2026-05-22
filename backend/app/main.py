@@ -14,6 +14,8 @@ from fastapi.responses import FileResponse
 from .config import get_settings
 from .storage import (
     ALLOWED_EXTENSIONS,
+    delete_job,
+    list_jobs,
     new_job_id,
     now_iso,
     read_job,
@@ -141,6 +143,23 @@ async def upload(
         raise HTTPException(status_code=500, detail=f"Pipeline failed: {e}")
 
     return {"job_id": job_id}
+
+
+@app.get("/jobs")
+async def list_recent_jobs(limit: int = 20):
+    """Recent jobs for the Recent Videos picker. Newest first, capped at
+    `limit` (default 20). Each entry is a compact summary — no segments.
+    """
+    return list_jobs(limit)
+
+
+@app.delete("/jobs/{job_id}")
+async def delete_existing_job(job_id: str):
+    """Remove a job's state file + entire upload folder (source video and
+    derived audio). Idempotent: 200 even if the job was already gone.
+    """
+    existed = delete_job(job_id)
+    return {"ok": True, "existed": existed}
 
 
 @app.get("/jobs/{job_id}")
