@@ -89,10 +89,12 @@ export default function VideoCanvas({
             style={{
               fontFamily: font.stack,
               color: colorForSpeaker(current.speaker, speakerOrder, style.textColor),
-              backgroundColor: style.highlightColor,
+              backgroundColor: style.highlightTransparent ? 'transparent' : style.highlightColor,
               WebkitTextStroke: `2px ${style.outlineColor}`,
               fontSize: `${2 * style.scale}rem`,
               fontWeight: font.weight,
+              lineHeight: 1.15,
+
               ['--anim-duration']: animDuration,
             }}
           >

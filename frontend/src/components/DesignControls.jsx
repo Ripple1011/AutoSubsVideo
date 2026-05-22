@@ -58,7 +58,28 @@ export default function DesignControls({ value, onChange }) {
 
       <ColorPicker label="Text"      value={value.textColor}      onChange={(v) => set('textColor', v)} />
       <ColorPicker label="Outline"   value={value.outlineColor}   onChange={(v) => set('outlineColor', v)} />
-      <ColorPicker label="Highlight" value={value.highlightColor} onChange={(v) => set('highlightColor', v)} />
+      <div className="space-y-1">
+        <ColorPicker label="Highlight" value={value.highlightColor} onChange={(v) => set('highlightColor', v)} />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-white/70">Background</span>
+          <div className="flex gap-1">
+            {[
+              { val: false, label: 'On' },
+              { val: true,  label: 'Off' },
+            ].map((b) => (
+              <button
+                key={b.label}
+                onClick={() => set('highlightTransparent', b.val)}
+                className={`px-3 py-1 rounded text-xs ${
+                  Boolean(value.highlightTransparent) === b.val ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <label className="flex items-center justify-between gap-3">
         <span className="text-white/70">Scale</span>

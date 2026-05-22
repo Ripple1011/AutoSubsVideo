@@ -10,6 +10,7 @@ const DEFAULT_STYLE = {
   textColor: '#ffffff',
   outlineColor: '#000000',
   highlightColor: '#aa3bff',
+  highlightTransparent: false,   // when true, no background fill behind subtitle
   scale: 1.0,
   verticalAlignment: 'bottom',   // 'top' | 'center' | 'bottom'
   animation: 'fade',             // 'none' | 'fade' | 'slide' | 'pop'
