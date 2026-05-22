@@ -5,6 +5,7 @@ import DesignControls from './components/DesignControls'
 import SettingsModal from './components/SettingsModal'
 import DropZone from './components/DropZone'
 import RecentVideosMenu from './components/RecentVideosMenu'
+import ExportMenu from './components/ExportMenu'
 import { api } from './lib/apiClient'
 
 const DEFAULT_STYLE = {
@@ -133,6 +134,7 @@ export default function App() {
               ＋ New Video
             </button>
           )}
+          {inWorkspace && <ExportMenu jobId={jobId} />}
           <RecentVideosMenu
             currentJobId={jobId}
             onPick={handlePickRecent}

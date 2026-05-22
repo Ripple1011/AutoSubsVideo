@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 from .config import get_settings
 from .storage import (
@@ -196,10 +196,69 @@ async def job_video(job_id: str):
     return FileResponse(candidates[0])
 
 
-@app.post("/export/soft")
+@app.get("/export/soft")
 async def export_soft(job_id: str, fmt: str = "srt"):
-    """Bundle original video + .srt/.vtt sidecar. No worker dispatch."""
-    raise NotImplementedError
+    """Return the segments as an .srt or .vtt sidecar download.
+
+    Pure read path — formats whatever is already in data/jobs/{id}.json.
+    No worker dispatch; cheap enough to run synchronously inside the
+    request thread.
+    """
+    fmt = fmt.lower().strip()
+    if fmt not in ("srt", "vtt"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format '{fmt}'. Choose 'srt' or 'vtt'.",
+        )
+    state = read_job(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    segments = state.get("segments") or []
+    if not segments:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job '{job_id}' has no segments yet (status: {state.get('status')}).",
+        )
+
+    body = _to_srt(segments) if fmt == "srt" else _to_vtt(segments)
+    base = Path(state.get("filename") or job_id).stem
+    return PlainTextResponse(
+        body,
+        media_type="text/vtt" if fmt == "vtt" else "application/x-subrip",
+        headers={"Content-Disposition": f'attachment; filename="{base}.{fmt}"'},
+    )
+
+
+def _fmt_time(t: float, ms_sep: str) -> str:
+    """Seconds → 'HH:MM:SS<ms_sep>mmm' using millisecond rounding that
+    correctly carries across second/minute/hour boundaries.
+    """
+    total_ms = max(0, int(round(t * 1000)))
+    h, rem = divmod(total_ms, 3_600_000)
+    m, rem = divmod(rem, 60_000)
+    s, ms = divmod(rem, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d}{ms_sep}{ms:03d}"
+
+
+def _to_srt(segments: list[dict]) -> str:
+    """SubRip: numbered blocks, comma decimal separator, CRLF-friendly text."""
+    parts: list[str] = []
+    for i, s in enumerate(segments, 1):
+        parts.append(str(i))
+        parts.append(f"{_fmt_time(float(s['start']), ',')} --> {_fmt_time(float(s['end']), ',')}")
+        parts.append((s.get('text') or '').strip())
+        parts.append('')
+    return "\n".join(parts)
+
+
+def _to_vtt(segments: list[dict]) -> str:
+    """WebVTT: header + dot decimal separator. No numbered counter."""
+    parts: list[str] = ["WEBVTT", ""]
+    for s in segments:
+        parts.append(f"{_fmt_time(float(s['start']), '.')} --> {_fmt_time(float(s['end']), '.')}")
+        parts.append((s.get('text') or '').strip())
+        parts.append('')
+    return "\n".join(parts)
 
 
 @app.post("/export/hard")
