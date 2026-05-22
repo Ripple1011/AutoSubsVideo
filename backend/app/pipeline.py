@@ -8,29 +8,43 @@ The job state document is persisted to disk between each phase so any frontend
 poll of GET /jobs/{id} sees the live status (`extracting` → `transcribing` →
 `ready` / `failed`).
 
-Segment LENGTH and TIMING are decided by the ASR provider — the Gemini prompt
-instructs the model to drive boundaries from the audio's own rhythm and to
-return per-word timestamps. After ASR, this pipeline re-chunks each segment at
-**natural boundaries** using two data-driven signals:
+## Segmentation architecture
 
-  (a) punctuation at word endings (`, . ? ! ; ।`), with digit and
-      short-prefix-abbreviation guards so `1.4`, `10,000`, `Mr.`, `U.S.` stay
-      inside one chunk.
-  (b) **inter-word gaps** that are unusually long for the speaker's pace —
-      defined adaptively as max(1.5× the segment's median word gap, 0.2 sec).
-      The multiplier scales with the speaker; the floor prevents splits on
-      micro-variations in tight speech.
+Gemini returns a FLAT word list — text, start, end, speaker, is_song per
+word. Python builds subtitle segments from those words here. This split
+exists because Gemini's word-level timestamps are accurate (grounded in
+audio frames) while its segment-level timestamps are unreliable for songs
+(it sometimes compresses an entire song into < 1 sec of segment time).
 
-Sub-segment start/end times come directly from real word timestamps — no
-proportional approximation. Segments lacking word-level data (non-Gemini ASR)
-fall back to text-only punctuation splitting with proportional timing.
+Building segments from words involves three passes:
+
+  1. **Region grouping** — split the word stream by speaker change and by
+     speech↔song transitions. Each region is one speaker × one mode.
+
+  2. **Region → segments**:
+     - Song region → one segment containing all its words (no chunking).
+     - Speech region → chunk by:
+       (a) word-end punctuation `, . ? ! ; ।` (digit & abbreviation guarded),
+       (b) coordinating conjunctions (and / or / but / because + Indic),
+       (c) **inter-word gaps** above max(1.5× this region's median, 0.2s),
+       (d) stylistic 3-word cap (TikTok-style brevity, not a heuristic).
+
+  3. **Aalaap fill** — for each is_song segment that's followed by another
+     segment, extend its end to the next segment's start, so held vowels at
+     line ends remain on screen until the next lyric begins. The LAST song
+     segment is NOT extended (its end is the last word's actual end —
+     trusting Gemini's word timing rather than audio duration).
+
+Non-Gemini providers (Groq, OpenAI, Sarvam) return `segments` directly;
+they go through a legacy path that splits at punctuation with proportional
+time distribution.
 """
 
 import statistics
 from pathlib import Path
 
 from .storage import read_job, write_job
-from .video_worker import extract_audio, probe_duration
+from .video_worker import extract_audio
 from .whisper_client import (
     _is_abbreviation_period,
     distribute_phrases,
@@ -92,7 +106,6 @@ async def run_pipeline(
 
         state["status"] = "transcribing"
         write_job(state)
-        audio_duration = probe_duration(str(audio_path))
         result = await transcribe(
             str(audio_path),
             language=state["language"],
@@ -102,13 +115,13 @@ async def run_pipeline(
             user_model=user_model,
         )
 
-        # Re-chunk at natural boundaries (punctuation + adaptive word-gap)
-        # for speech; pass songs through. Then extend each song segment's end
-        # to the next segment's start (or to audio end for the last) so the
-        # held vowel / aalaap stays on screen — Gemini under-reports song
-        # segment.end despite prompt guidance.
-        segments = _split_at_natural_boundaries(result["segments"])
-        segments = _fill_song_aalaap_gaps(segments, audio_duration)
+        # Build subtitle segments. Gemini returns flat words → build from
+        # scratch; other providers return native segments → use the legacy
+        # punctuation splitter with proportional timing.
+        if "words" in result:
+            segments = _build_segments_from_words(result["words"])
+        else:
+            segments = _split_at_natural_boundaries(result.get("segments", []))
         offset = float(state.get("start_offset") or 0.0)
         if offset:
             segments = [
@@ -127,6 +140,58 @@ async def run_pipeline(
         state["error"] = str(e)
         write_job(state)
         raise
+
+
+def _build_segments_from_words(words: list[dict]) -> list[dict]:
+    """Build subtitle segments from a flat word list (Gemini's output shape).
+
+    Steps:
+      1. Group consecutive words by (speaker, is_song) into regions.
+      2. Convert each region: songs stay whole; speech gets chunked by
+         `_chunk_words` (punctuation, conjunctions, adaptive gap, 3-word cap).
+      3. Aalaap-fill between consecutive is_song segments — extend each
+         song segment's `end` to the next segment's `start` so held vowels
+         remain on screen. The final song segment is NOT extended; its end
+         is the last word's actual `end` (trusting Gemini's per-word timing).
+    """
+    if not words:
+        return []
+
+    # 1. Region grouping
+    regions: list[dict] = []
+    current: dict | None = None
+    for w in words:
+        key = (w.get("speaker"), bool(w.get("is_song")))
+        if current is None or key != (current["speaker"], current["is_song"]):
+            current = {"speaker": key[0], "is_song": key[1], "words": [w]}
+            regions.append(current)
+        else:
+            current["words"].append(w)
+
+    # 2. Region → segments
+    out: list[dict] = []
+    for region in regions:
+        ws = region["words"]
+        # Songs: gap-only chunking (one segment per lyrical line). No
+        # punctuation/conjunction/word-cap rules — lyrics flow as whole
+        # lines and held vowels are inside word end times. Speech: full
+        # natural-boundary rules + 3-word cap.
+        chunks = _chunk_words_by_phrase_end(ws) if region["is_song"] else _chunk_words(ws)
+        for chunk in chunks:
+            out.append({
+                "start": chunk[0]["start"],
+                "end": chunk[-1]["end"],
+                "text": " ".join(w["text"] for w in chunk).strip(),
+                "speaker": region["speaker"],
+                "is_song": region["is_song"],
+                "words": chunk,
+            })
+
+    # 3. Aalaap fill — only between consecutive segments. No audio-end fudge.
+    for i in range(len(out) - 1):
+        if out[i].get("is_song") and out[i + 1]["start"] > out[i]["end"]:
+            out[i]["end"] = out[i + 1]["start"]
+    return out
 
 
 def _split_at_natural_boundaries(segments: list[dict]) -> list[dict]:
@@ -171,6 +236,53 @@ def _split_at_natural_boundaries(segments: list[dict]) -> list[dict]:
     return out
 
 
+def _chunk_words_by_phrase_end(words: list[dict]) -> list[list[dict]]:
+    """Chunk words at Gemini-emitted lyrical-line boundaries.
+
+    Gemini marks `phrase_end=true` on the last word of each natural display
+    phrase (lyrical line for songs). One segment per such phrase — same shape
+    as the first aalaap-fix version, where Gemini chose segment boundaries.
+    Falls back to adaptive gap detection if Gemini omitted phrase_end on every
+    word (e.g., an older model response).
+    """
+    if len(words) <= 1:
+        return [words]
+    has_phrase_end = any(w.get("phrase_end") for w in words)
+    if has_phrase_end:
+        chunks: list[list[dict]] = []
+        bucket: list[dict] = []
+        for w in words:
+            bucket.append(w)
+            if w.get("phrase_end"):
+                chunks.append(bucket)
+                bucket = []
+        if bucket:
+            chunks.append(bucket)
+        return chunks
+
+    # Fallback: adaptive gap detection — held-vowel pauses between lines
+    # create gaps well above the song's median intra-line word gap.
+    gaps = [
+        max(0.0, words[i + 1]["start"] - words[i]["end"])
+        for i in range(len(words) - 1)
+    ]
+    nonzero = [g for g in gaps if g > 0]
+    median_gap = statistics.median(nonzero) if nonzero else 0.0
+    threshold = max(median_gap * _GAP_MULTIPLIER, _GAP_FLOOR_SEC)
+
+    split_after = {i for i, g in enumerate(gaps) if g > threshold}
+    if not split_after:
+        return [words]
+    chunks = []
+    start = 0
+    for end_idx in sorted(split_after):
+        chunks.append(words[start : end_idx + 1])
+        start = end_idx + 1
+    if start < len(words):
+        chunks.append(words[start:])
+    return chunks
+
+
 def _chunk_words(words: list[dict]) -> list[list[dict]]:
     """Group consecutive words into sub-chunks. Splits AFTER word i when:
       - word i ends in a phrase-ending punctuation (with guards), OR
@@ -191,6 +303,9 @@ def _chunk_words(words: list[dict]) -> list[list[dict]]:
 
     split_after: set[int] = set()
     for i in range(len(words) - 1):
+        if words[i].get("phrase_end"):
+            split_after.add(i)
+            continue
         if _word_ends_phrase(words[i]["text"], words[i + 1]["text"]):
             split_after.add(i)
             continue
@@ -260,28 +375,6 @@ def _is_conjunction(word_text: str) -> bool:
     if not bare:
         return False
     return bare.lower() in _CONJUNCTIONS_LATIN or bare in _CONJUNCTIONS_INDIC
-
-
-def _fill_song_aalaap_gaps(segments: list[dict], audio_end: float) -> list[dict]:
-    """Extend each `is_song` segment's `end` to the next segment's `start`
-    (or to `audio_end` for the last segment), so a held vowel / aalaap after
-    the last word remains on screen until the next line begins.
-
-    No threshold — every gap after a song segment is filled. Speech segments
-    are untouched: their end times reflect actual speaking and a real pause
-    between speech segments is correctly shown as no subtitle. This is a
-    content rule keyed on the `is_song` flag, not a numeric heuristic.
-    """
-    if not segments:
-        return segments
-    out = [dict(s) for s in segments]
-    for i, s in enumerate(out):
-        if not s.get("is_song"):
-            continue
-        next_start = out[i + 1]["start"] if i + 1 < len(out) else audio_end
-        if next_start > s["end"]:
-            s["end"] = next_start
-    return out
 
 
 def _split_at_punctuation_proportional(segment: dict) -> list[dict]:

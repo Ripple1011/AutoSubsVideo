@@ -115,7 +115,13 @@ async def transcribe(
 ) -> dict:
     """Dispatch to the resolved provider's transcription endpoint.
 
-    Output shape (normalized): { language, segments: [{ start, end, text }] }.
+    Output shape varies by provider:
+      • Gemini → { language, words: [{ text, start, end, speaker, is_song }] }
+        Flat word list — pipeline.py builds subtitle segments from this.
+      • Groq / OpenAI / Sarvam → { language, segments: [{ start, end, text }] }
+        Native segment shape — pipeline.py uses these directly.
+
+    The caller (pipeline.run_pipeline) detects which shape is present.
     """
     provider, model, api_key = resolve_credentials(user_key, user_provider, user_model)
 
@@ -342,72 +348,46 @@ async def _gemini_generate(
     extra_context = f" Context hint: {prompt}." if prompt else ""
 
     instruction = (
-        "Transcribe the speech in this audio for use as on-screen subtitles in "
-        "short-form vertical video (TikTok, Instagram Reels, YouTube Shorts). "
-        + lang_instruction + extra_context +
-        " Segmentation must be driven by what you HEAR in the audio — never by a "
-        "fixed word count or duration. The target is a viewer who reads each "
-        "subtitle at a glance while watching, so segments must be quick to "
-        "absorb."
-        "\n\nFor SPEECH (podcasts, monologues, dialogue, broadcasts): bias toward "
-        "MANY short segments rather than few long ones. A single grammatical "
-        "sentence will almost always span several segments."
-        "\n\n**Hard rule for speech**: end a segment at EVERY one of these "
-        "punctuation marks — comma (,), period (.), question mark (?), "
-        "exclamation mark (!), semicolon (;), Devanagari danda (।). The "
-        "punctuation stays attached to the preceding segment; the next segment "
-        "begins with the following word. EXCEPTION: do not treat `.` or `,` as "
-        "a boundary when it sits between two digits — '1.4', '10,000', '$3.99', "
-        "'2025' are numeric literals that must stay inside one segment."
-        "\n\nAlso break at coordinating conjunctions (and / but / so / because "
-        "/ or / जो / और / लेकिन / પણ / અને) and at every micro-pause however "
-        "brief, even when no punctuation would naturally appear there. Set "
-        "each segment's `end` to where the speaker's voice actually stops for "
-        "that fragment, not where the linguistic clause would complete."
-        "\n\nFor SONG / SUNG passages — these rules are CRITICAL and override "
-        "any conflicting guidance above:\n"
-        "  • Each lyrical line is ONE segment — do NOT split a sung line.\n"
-        "  • Do NOT emit a segment for an opening aalaap, hum, instrumental, "
-        "or any vocalization that comes BEFORE the first actual lyric. The "
-        "first song segment must start at the first audible LYRIC.\n"
-        "  • Each segment's `end` must mark the time the singer STOPS "
-        "vocalizing that line — INCLUDING any sustained vowel, held note, or "
-        "aalaap / melisma that comes after the last word. This means a "
-        "segment's `end` will often be LATER (sometimes by seconds) than the "
-        "`end` of its last word. Setting segment.end equal to last-word.end "
-        "is WRONG for songs.\n"
-        "  • For song segments you MAY omit the `words` array — it's not used "
-        "downstream for songs, and skipping it makes the response faster."
-        "\n\nAcross both modes: never merge a segment across a clear pause; "
-        "never emit empty or silence-only segments; faster delivery yields "
-        "shorter segments; slower delivery yields slightly longer ones."
-        "\n\nKeep numeric literals such as '1.4', '10,000', '$3.99', '2025' "
-        "intact inside a single segment — never split on a digit boundary."
-        " Provide accurate per-segment `start` and `end` timestamps in seconds "
-        "measured from the start of the audio. **Also provide a `words` array "
-        "inside each segment** — one entry per spoken word with its `text`, "
-        "`start`, and `end` time in seconds. The word timestamps must reflect "
-        "actual acoustic boundaries (when each word's voicing begins and "
-        "ends), not estimated positions; they are used downstream to detect "
-        "speaker pauses that may not be punctuated in the transcript."
-        "\n\n**Speaker diarization**: detect distinct voices in the audio and "
-        "tag each segment with a `speaker` field. Use stable labels like "
-        "'Speaker 1', 'Speaker 2', etc., assigned in the order each voice "
-        "first appears. The same voice MUST get the same label across the "
-        "entire audio. If there is only one voice, label every segment "
-        "'Speaker 1'. For sung audio with a single vocalist, treat the singer "
-        "as one speaker. Do NOT guess speakers from content cues — base it on "
-        "voice timbre / pitch only."
-        "\n\n**Song detection**: for each segment set `is_song: true` if the "
-        "audio is sung in a musical way (melody, sustained notes, rhythm tied "
-        "to a beat or musical accompaniment), else `is_song: false`. Be liberal "
-        "with this flag — even short sung phrases or chants count. Downstream, "
-        "song segments are preserved exactly as you return them (no further "
-        "chunking), so keep each sung lyrical line as one segment whose `end` "
-        "covers any held vowel / aalaap at the end."
-        " Do NOT translate. Use the original script (Devanagari for Hindi, "
-        "Gujarati script for Gujarati). Skip non-speech regions (instrumental, "
-        "silence)."
+        "Transcribe this audio at the WORD level. Return a flat list of every "
+        "spoken or sung word, each with its acoustic timing and speaker tag. "
+        "Do NOT group words into sentences or segments — downstream code does "
+        "that. " + lang_instruction + extra_context +
+        "\n\nFor each word, provide:\n"
+        "  • `text` — the word in the ORIGINAL script (Devanagari for Hindi, "
+        "Gujarati script for Gujarati). Do NOT translate. Punctuation that "
+        "naturally attaches to a word (e.g., a trailing comma or period) "
+        "stays inside that word's `text` field — emit `'Modi,'` and `'sir.'` "
+        "rather than separate tokens.\n"
+        "  • `start` — acoustic time in seconds when the word's voicing "
+        "begins, measured from the start of the audio.\n"
+        "  • `end` — acoustic time in seconds when the word's voicing STOPS. "
+        "For sung words with a held vowel / sustained note / aalaap / "
+        "melisma at the end, `end` must mark when the singer stops "
+        "vocalizing — NOT when the last consonant is pronounced. A sung "
+        "word with a 2-second held vowel has `end - start ≈ 2 seconds`.\n"
+        "  • `speaker` — stable label like 'Speaker 1', 'Speaker 2', "
+        "assigned in the order each distinct voice first appears. Same "
+        "voice across the audio MUST get the same label. Single-voice "
+        "audio: every word is 'Speaker 1'. Base it on voice timbre / "
+        "pitch only, not content cues.\n"
+        "  • `is_song` — `true` if the word is SUNG (melody, sustained "
+        "notes, rhythm tied to a beat or musical accompaniment); `false` "
+        "if SPOKEN. Be liberal — even short sung phrases or chants count.\n"
+        "  • `phrase_end` — `true` if this word completes a natural display "
+        "phrase. For SONGS, set true on the last word of each lyrical line "
+        "(the word immediately before the singer pauses, takes a breath, or "
+        "starts a held vowel before the next line). For SPEECH, set true on "
+        "the last word of a sentence, clause, or major breath group "
+        "(typically before a period, comma, or audible pause). The VERY LAST "
+        "word in the audio MUST have `phrase_end = true`. Every other word "
+        "is `false`.\n"
+        "\nNumeric literals like '1.4', '10,000', '$3.99', '2025' are ONE "
+        "word each — never emit them as multiple tokens split on the digit "
+        "boundary."
+        "\n\nSkip non-speech (opening aalaap before any lyric, instrumental "
+        "passages, pure silence, breath-only) — emit NO word for these "
+        "regions. The first word emitted for a song should be the first "
+        "audible LYRIC, never an opening hum or vocalization."
     )
 
     body = {
@@ -423,34 +403,23 @@ async def _gemini_generate(
                 "type": "object",
                 "properties": {
                     "language": {"type": "string"},
-                    "segments": {
+                    "words": {
                         "type": "array",
                         "items": {
                             "type": "object",
                             "properties": {
+                                "text": {"type": "string"},
                                 "start": {"type": "number"},
                                 "end": {"type": "number"},
-                                "text": {"type": "string"},
                                 "speaker": {"type": "string"},
                                 "is_song": {"type": "boolean"},
-                                "words": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "text": {"type": "string"},
-                                            "start": {"type": "number"},
-                                            "end": {"type": "number"},
-                                        },
-                                        "required": ["text", "start", "end"],
-                                    },
-                                },
+                                "phrase_end": {"type": "boolean"},
                             },
-                            "required": ["start", "end", "text", "speaker", "is_song"],
+                            "required": ["text", "start", "end", "speaker", "is_song", "phrase_end"],
                         },
                     },
                 },
-                "required": ["segments"],
+                "required": ["words"],
             },
             "temperature": 0.1,
         },
@@ -477,31 +446,22 @@ async def _gemini_generate(
             detail=f"gemini returned unexpected shape: {e} | preview: {str(data)[:300]}",
         )
 
-    segments = []
-    for s in parsed.get("segments", []):
-        text = (s.get("text") or "").strip()
+    words = []
+    for w in parsed.get("words", []):
+        text = (w.get("text") or "").strip()
         if not text:
             continue
-        words = [
-            {
-                "text": (w.get("text") or "").strip(),
-                "start": float(w.get("start", 0.0)),
-                "end": float(w.get("end", 0.0)),
-            }
-            for w in (s.get("words") or [])
-            if (w.get("text") or "").strip()
-        ]
-        segments.append({
-            "start": float(s.get("start", 0.0)),
-            "end": float(s.get("end", 0.0)),
+        words.append({
             "text": text,
-            "speaker": (s.get("speaker") or "Speaker 1").strip() or "Speaker 1",
-            "is_song": bool(s.get("is_song", False)),
-            "words": words,
+            "start": float(w.get("start", 0.0)),
+            "end": float(w.get("end", 0.0)),
+            "speaker": (w.get("speaker") or "Speaker 1").strip() or "Speaker 1",
+            "is_song": bool(w.get("is_song", False)),
+            "phrase_end": bool(w.get("phrase_end", False)),
         })
     return {
         "language": parsed.get("language", language),
-        "segments": segments,
+        "words": words,
     }
 
 
