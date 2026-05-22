@@ -342,12 +342,72 @@ async def _gemini_generate(
     extra_context = f" Context hint: {prompt}." if prompt else ""
 
     instruction = (
-        "Transcribe the speech in this audio. " + lang_instruction + extra_context +
-        " Return short subtitle segments suitable for short-form video — each segment "
-        "should be 2 to 8 words long and span roughly 1 to 4 seconds. Provide accurate "
-        "per-segment start and end timestamps in seconds measured from the start of the "
-        "audio. Do NOT translate. Use the original script (Devanagari for Hindi, "
-        "Gujarati script for Gujarati). Skip non-speech regions (instrumental, silence)."
+        "Transcribe the speech in this audio for use as on-screen subtitles in "
+        "short-form vertical video (TikTok, Instagram Reels, YouTube Shorts). "
+        + lang_instruction + extra_context +
+        " Segmentation must be driven by what you HEAR in the audio — never by a "
+        "fixed word count or duration. The target is a viewer who reads each "
+        "subtitle at a glance while watching, so segments must be quick to "
+        "absorb."
+        "\n\nFor SPEECH (podcasts, monologues, dialogue, broadcasts): bias toward "
+        "MANY short segments rather than few long ones. A single grammatical "
+        "sentence will almost always span several segments."
+        "\n\n**Hard rule for speech**: end a segment at EVERY one of these "
+        "punctuation marks — comma (,), period (.), question mark (?), "
+        "exclamation mark (!), semicolon (;), Devanagari danda (।). The "
+        "punctuation stays attached to the preceding segment; the next segment "
+        "begins with the following word. EXCEPTION: do not treat `.` or `,` as "
+        "a boundary when it sits between two digits — '1.4', '10,000', '$3.99', "
+        "'2025' are numeric literals that must stay inside one segment."
+        "\n\nAlso break at coordinating conjunctions (and / but / so / because "
+        "/ or / जो / और / लेकिन / પણ / અને) and at every micro-pause however "
+        "brief, even when no punctuation would naturally appear there. Set "
+        "each segment's `end` to where the speaker's voice actually stops for "
+        "that fragment, not where the linguistic clause would complete."
+        "\n\nFor SONG / SUNG passages — these rules are CRITICAL and override "
+        "any conflicting guidance above:\n"
+        "  • Each lyrical line is ONE segment — do NOT split a sung line.\n"
+        "  • Do NOT emit a segment for an opening aalaap, hum, instrumental, "
+        "or any vocalization that comes BEFORE the first actual lyric. The "
+        "first song segment must start at the first audible LYRIC.\n"
+        "  • Each segment's `end` must mark the time the singer STOPS "
+        "vocalizing that line — INCLUDING any sustained vowel, held note, or "
+        "aalaap / melisma that comes after the last word. This means a "
+        "segment's `end` will often be LATER (sometimes by seconds) than the "
+        "`end` of its last word. Setting segment.end equal to last-word.end "
+        "is WRONG for songs.\n"
+        "  • For song segments you MAY omit the `words` array — it's not used "
+        "downstream for songs, and skipping it makes the response faster."
+        "\n\nAcross both modes: never merge a segment across a clear pause; "
+        "never emit empty or silence-only segments; faster delivery yields "
+        "shorter segments; slower delivery yields slightly longer ones."
+        "\n\nKeep numeric literals such as '1.4', '10,000', '$3.99', '2025' "
+        "intact inside a single segment — never split on a digit boundary."
+        " Provide accurate per-segment `start` and `end` timestamps in seconds "
+        "measured from the start of the audio. **Also provide a `words` array "
+        "inside each segment** — one entry per spoken word with its `text`, "
+        "`start`, and `end` time in seconds. The word timestamps must reflect "
+        "actual acoustic boundaries (when each word's voicing begins and "
+        "ends), not estimated positions; they are used downstream to detect "
+        "speaker pauses that may not be punctuated in the transcript."
+        "\n\n**Speaker diarization**: detect distinct voices in the audio and "
+        "tag each segment with a `speaker` field. Use stable labels like "
+        "'Speaker 1', 'Speaker 2', etc., assigned in the order each voice "
+        "first appears. The same voice MUST get the same label across the "
+        "entire audio. If there is only one voice, label every segment "
+        "'Speaker 1'. For sung audio with a single vocalist, treat the singer "
+        "as one speaker. Do NOT guess speakers from content cues — base it on "
+        "voice timbre / pitch only."
+        "\n\n**Song detection**: for each segment set `is_song: true` if the "
+        "audio is sung in a musical way (melody, sustained notes, rhythm tied "
+        "to a beat or musical accompaniment), else `is_song: false`. Be liberal "
+        "with this flag — even short sung phrases or chants count. Downstream, "
+        "song segments are preserved exactly as you return them (no further "
+        "chunking), so keep each sung lyrical line as one segment whose `end` "
+        "covers any held vowel / aalaap at the end."
+        " Do NOT translate. Use the original script (Devanagari for Hindi, "
+        "Gujarati script for Gujarati). Skip non-speech regions (instrumental, "
+        "silence)."
     )
 
     body = {
@@ -371,8 +431,22 @@ async def _gemini_generate(
                                 "start": {"type": "number"},
                                 "end": {"type": "number"},
                                 "text": {"type": "string"},
+                                "speaker": {"type": "string"},
+                                "is_song": {"type": "boolean"},
+                                "words": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "text": {"type": "string"},
+                                            "start": {"type": "number"},
+                                            "end": {"type": "number"},
+                                        },
+                                        "required": ["text", "start", "end"],
+                                    },
+                                },
                             },
-                            "required": ["start", "end", "text"],
+                            "required": ["start", "end", "text", "speaker", "is_song"],
                         },
                     },
                 },
@@ -403,15 +477,28 @@ async def _gemini_generate(
             detail=f"gemini returned unexpected shape: {e} | preview: {str(data)[:300]}",
         )
 
-    segments = [
-        {
+    segments = []
+    for s in parsed.get("segments", []):
+        text = (s.get("text") or "").strip()
+        if not text:
+            continue
+        words = [
+            {
+                "text": (w.get("text") or "").strip(),
+                "start": float(w.get("start", 0.0)),
+                "end": float(w.get("end", 0.0)),
+            }
+            for w in (s.get("words") or [])
+            if (w.get("text") or "").strip()
+        ]
+        segments.append({
             "start": float(s.get("start", 0.0)),
             "end": float(s.get("end", 0.0)),
-            "text": (s.get("text") or "").strip(),
-        }
-        for s in parsed.get("segments", [])
-        if (s.get("text") or "").strip()
-    ]
+            "text": text,
+            "speaker": (s.get("speaker") or "Speaker 1").strip() or "Speaker 1",
+            "is_song": bool(s.get("is_song", False)),
+            "words": words,
+        })
     return {
         "language": parsed.get("language", language),
         "segments": segments,
@@ -500,8 +587,8 @@ def _sarvam_segments(payload: dict) -> list[dict]:
     if real_per_word:
         return _bunch_words_into_segments(words_field, starts, ends, max_seconds=3.0)
 
-    phrases = _split_transcript(transcript)
-    return _distribute_phrases(phrases, chunk_start, chunk_end)
+    phrases = split_transcript(transcript)
+    return distribute_phrases(phrases, chunk_start, chunk_end)
 
 
 def _bunch_words_into_segments(
@@ -530,19 +617,46 @@ def _bunch_words_into_segments(
 _PHRASE_SPLIT_PUNCT = "।.?!,;"
 
 
-def _split_transcript(text: str) -> list[str]:
+def _is_abbreviation_period(text: str, i: int) -> bool:
+    """True if the `.` at position `i` looks like an abbreviation period
+    (Mr., Dr., U.S., etc.) rather than a sentence terminator.
+
+    Heuristic: walk backwards across ASCII letters from i-1; if the run is
+    shorter than 4 characters, treat as an abbreviation. Real words ending
+    sentences are almost always 4+ letters; English titles/initials are 1-3.
+    """
+    j = i - 1
+    while j >= 0 and text[j].isascii() and text[j].isalpha():
+        j -= 1
+    run_len = i - 1 - j
+    return 0 < run_len < 4
+
+
+def split_transcript(
+    text: str,
+    max_words: int = 8,
+    chunk_size: int = 5,
+) -> list[str]:
     """Split a transcript into display-sized phrases.
 
     First try splitting on punctuation. If that yields phrases longer than
-    ~8 words, split those further by fixed word-count chunks (5 words each).
+    `max_words`, split those further into fixed `chunk_size`-word groups.
     """
     # Walk the string; cut after each punctuation char, keeping the punct
-    # attached to the preceding phrase.
+    # attached to the preceding phrase. Guards:
+    #   - Digit-between: keep "1.4", "10,000" intact (numeric literals).
+    #   - Short alphabetic prefix before `.`: treat as abbreviation (Mr., Dr.,
+    #     Ms., St., U.S., etc.) — period there does NOT end a phrase. A run of
+    #     4+ letters before `.` is taken to be a real word ending a sentence.
     raw: list[str] = []
     buf = ""
-    for ch in text:
+    for i, ch in enumerate(text):
         buf += ch
         if ch in _PHRASE_SPLIT_PUNCT:
+            if ch in ".," and i + 1 < len(text) and text[i + 1].isdigit():
+                continue
+            if ch == "." and _is_abbreviation_period(text, i):
+                continue
             phrase = buf.strip()
             if phrase:
                 raw.append(phrase)
@@ -552,22 +666,22 @@ def _split_transcript(text: str) -> list[str]:
         raw.append(tail)
 
     # If a single phrase has too many words (e.g., a sung line with no
-    # punctuation), split it into 5-word groups.
+    # punctuation), split it into fixed-size word groups.
     out: list[str] = []
     for phrase in raw:
         words = phrase.split()
-        if len(words) <= 8:
+        if len(words) <= max_words:
             out.append(phrase)
             continue
-        for i in range(0, len(words), 5):
-            out.append(" ".join(words[i:i + 5]))
+        for i in range(0, len(words), chunk_size):
+            out.append(" ".join(words[i:i + chunk_size]))
     return out or [text]   # ensure at least one phrase
 
 
 import regex as _regex
 
 
-def _grapheme_len(text: str) -> int:
+def grapheme_len(text: str) -> int:
     """Count grapheme clusters in `text` — closer to spoken length for
     Devanagari/Gujarati than Python's len() which counts each matra/anusvara
     as a separate character. `\\X` is Unicode TR29 "extended grapheme cluster"
@@ -576,7 +690,7 @@ def _grapheme_len(text: str) -> int:
     return len(_regex.findall(r"\X", text))
 
 
-def _distribute_phrases(
+def distribute_phrases(
     phrases: list[str], chunk_start: float, chunk_end: float
 ) -> list[dict]:
     """Spread phrases proportionally across [chunk_start, chunk_end] by
@@ -588,7 +702,7 @@ def _distribute_phrases(
     """
     if not phrases:
         return []
-    weights = [_grapheme_len(p) for p in phrases]
+    weights = [grapheme_len(p) for p in phrases]
     total = sum(weights) or 1
     duration = max(chunk_end - chunk_start, 0.0)
 

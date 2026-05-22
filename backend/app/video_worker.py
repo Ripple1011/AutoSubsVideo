@@ -89,6 +89,14 @@ def chunk_audio(
     return chunks
 
 
+def probe_duration(path: str) -> float:
+    """Return audio/video duration in seconds. Thin public wrapper around
+    `_probe_duration` for callers that don't already have an ffmpeg path.
+    """
+    from imageio_ffmpeg import get_ffmpeg_exe
+    return _probe_duration(get_ffmpeg_exe(), path)
+
+
 def _probe_duration(ffmpeg: str, path: str) -> float:
     import subprocess
     # FFmpeg prints duration to stderr; parse from the "Duration:" line.

@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { FONT_STACKS } from './DesignControls'
+import { colorForSpeaker, speakerOrderFromSegments } from '../lib/speakerColors'
 
 /**
  * 9:16 vertical preview canvas.
@@ -17,6 +18,10 @@ export default function VideoCanvas({
   style,
 }) {
   const videoRef = useRef(null)
+
+  // Speakers in order of first appearance — used to map each speaker label
+  // to a stable color slot.
+  const speakerOrder = useMemo(() => speakerOrderFromSegments(segments), [segments])
 
   // Sidebar click → scrub video to that segment's start.
   useEffect(() => {
@@ -83,7 +88,7 @@ export default function VideoCanvas({
             className={`px-3 py-1 rounded text-center max-w-[90%] ${animClass}`}
             style={{
               fontFamily: font.stack,
-              color: style.textColor,
+              color: colorForSpeaker(current.speaker, speakerOrder, style.textColor),
               backgroundColor: style.highlightColor,
               WebkitTextStroke: `2px ${style.outlineColor}`,
               fontSize: `${2 * style.scale}rem`,
