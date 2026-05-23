@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import ColorPicker from './ColorPicker'
+import { SPEAKER_PALETTE, colorForSpeaker, speakerOrderFromSegments } from '../lib/speakerColors'
 
 // Each label maps to a multi-script stack. The browser resolves font-family
 // per codepoint, so Latin chars use the first font, Devanagari/Gujarati chars
@@ -39,9 +41,28 @@ const SPEEDS = ['fast', 'normal', 'slow']
 /**
  * Design sidebar — fonts, hex colors, scale slider, vertical alignment.
  * Emits the full styleSchema upward; never round-trips to server during editing.
+ *
+ * When `segments` carries 2+ distinct speakers, a Speaker Colors section
+ * appears so the user can override the auto-assigned palette per speaker
+ * label. Overrides land in `value.speakerColors[<label>]` and flow through
+ * colorForSpeaker() everywhere (canvas overlay, sidebar stripe, ASS burn).
  */
-export default function DesignControls({ value, onChange }) {
+export default function DesignControls({ value, onChange, segments = [] }) {
   const set = (k, v) => onChange({ ...value, [k]: v })
+  const setSpeakerColor = (label, color) => {
+    onChange({
+      ...value,
+      speakerColors: { ...(value.speakerColors || {}), [label]: color },
+    })
+  }
+  const clearSpeakerColor = (label) => {
+    const next = { ...(value.speakerColors || {}) }
+    delete next[label]
+    onChange({ ...value, speakerColors: next })
+  }
+
+  const speakerOrder = useMemo(() => speakerOrderFromSegments(segments), [segments])
+  const showSpeakerSection = speakerOrder.length >= 2
 
   return (
     <div className="p-4 space-y-4 text-sm">
@@ -56,8 +77,41 @@ export default function DesignControls({ value, onChange }) {
         </select>
       </label>
 
-      <ColorPicker label="Text"      value={value.textColor}      onChange={(v) => set('textColor', v)} />
+      {!showSpeakerSection && (
+        <ColorPicker label="Text" value={value.textColor} onChange={(v) => set('textColor', v)} />
+      )}
       <ColorPicker label="Outline"   value={value.outlineColor}   onChange={(v) => set('outlineColor', v)} />
+
+      {showSpeakerSection && (
+        <div className="space-y-1 rounded bg-white/[0.025] border border-white/10 p-2">
+          <div className="text-[11px] uppercase tracking-wide text-white/40 mb-1">
+            Speaker Colors
+          </div>
+          {speakerOrder.map((label) => {
+            const override = (value.speakerColors || {})[label]
+            const effective = colorForSpeaker(label, speakerOrder, value.textColor, value.speakerColors)
+            return (
+              <div key={label} className="flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <ColorPicker
+                    label={label}
+                    value={effective}
+                    onChange={(v) => setSpeakerColor(label, v)}
+                  />
+                </div>
+                <button
+                  onClick={() => clearSpeakerColor(label)}
+                  disabled={!override}
+                  className="text-[10px] px-2 py-1 rounded text-white/40 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={override ? 'Revert to auto-assigned color' : 'Using auto-assigned color'}
+                >
+                  ⟲
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
       <div className="space-y-1">
         <ColorPicker label="Highlight" value={value.highlightColor} onChange={(v) => set('highlightColor', v)} />
         <div className="flex items-center justify-between gap-3">

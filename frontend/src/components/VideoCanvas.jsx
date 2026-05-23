@@ -144,7 +144,7 @@ export default function VideoCanvas({
             className={`px-3 py-1 rounded text-center max-w-[90%] ${animClass}`}
             style={{
               fontFamily: font.stack,
-              color: colorForSpeaker(current.speaker, speakerOrder, style.textColor),
+              color: colorForSpeaker(current.speaker, speakerOrder, style.textColor, style.speakerColors),
               backgroundColor: style.highlightTransparent ? 'transparent' : style.highlightColor,
               WebkitTextStroke: `2px ${style.outlineColor}`,
               fontSize: `${2 * style.scale}rem`,

@@ -10,13 +10,14 @@ import { colorForSpeaker, speakerOrderFromSegments } from '../lib/speakerColors'
  * the timestamp so the creator can see speaker assignments at a glance.
  * Single-speaker transcripts hide the label (stripe stays neutral white).
  */
-export default function SubtitleSidebar({ segments, activeIndex, onSelect, onEdit }) {
+export default function SubtitleSidebar({ segments, activeIndex, onSelect, onEdit, style }) {
   const updateText = (i, text) => {
     const next = segments.map((s, idx) => (idx === i ? { ...s, text } : s))
     onEdit(next)
   }
 
   const speakerOrder = useMemo(() => speakerOrderFromSegments(segments), [segments])
+  const overrides = style?.speakerColors
   const showSpeakerLabels = speakerOrder.length >= 2
 
   if (segments.length === 0) {
@@ -30,7 +31,7 @@ export default function SubtitleSidebar({ segments, activeIndex, onSelect, onEdi
   return (
     <ul className="divide-y divide-white/5">
       {segments.map((s, i) => {
-        const stripeColor = colorForSpeaker(s.speaker, speakerOrder, '#FFFFFF')
+        const stripeColor = colorForSpeaker(s.speaker, speakerOrder, '#FFFFFF', overrides)
         return (
           <li
             key={i}

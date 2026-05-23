@@ -192,12 +192,21 @@ def _build_ass(segments: list[dict], style: dict) -> str:
         if sp and sp not in speaker_order:
             speaker_order.append(sp)
 
+    # Per-speaker user overrides from the DesignControls picker. Empty {}
+    # when the user hasn't touched any. Same priority order as the
+    # frontend's colorForSpeaker(): explicit override > textColor (first
+    # speaker) > palette cycle.
+    color_overrides: dict[str, str] = style.get("speakerColors") or {}
+
     def speaker_color_override(speaker: str | None) -> str:
         if not speaker:
             return ""
+        explicit = color_overrides.get(speaker)
+        if explicit:
+            return f"{{\\c{_hex_to_ass(explicit)}}}"
         idx = speaker_order.index(speaker) if speaker in speaker_order else -1
         if idx <= 0:
-            return ""   # first speaker uses the Style's PrimaryColour
+            return ""   # first speaker uses the Style's PrimaryColour (textColor)
         palette_hex = _SPEAKER_PALETTE[(idx - 1) % len(_SPEAKER_PALETTE)]
         return f"{{\\c{_hex_to_ass(palette_hex)}}}"
 

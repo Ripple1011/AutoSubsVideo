@@ -14,6 +14,7 @@ const DEFAULT_STYLE = {
   outlineColor: '#000000',
   highlightColor: '#aa3bff',
   highlightTransparent: false,   // when true, no background fill behind subtitle
+  speakerColors: {},             // { "Speaker 2": "#ff5599", ... } — per-label overrides
   scale: 1.0,
   verticalAlignment: 'bottom',   // 'top' | 'center' | 'bottom'
   animation: 'fade',             // 'none' | 'fade' | 'slide' | 'pop'
@@ -166,6 +167,7 @@ export default function App() {
               activeIndex={activeIndex}
               onSelect={setActiveIndex}
               onEdit={setSegments}
+              style={styleSchema}
             />
           </section>
           <section className="flex items-center justify-center bg-black/50 min-h-0 p-4">
@@ -179,7 +181,7 @@ export default function App() {
             />
           </section>
           <section className="border-l border-white/10 overflow-y-auto min-h-0">
-            <DesignControls value={styleSchema} onChange={setStyleSchema} />
+            <DesignControls value={styleSchema} onChange={setStyleSchema} segments={segments} />
           </section>
         </main>
       )}

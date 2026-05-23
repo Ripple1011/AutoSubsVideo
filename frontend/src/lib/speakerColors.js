@@ -14,10 +14,13 @@ export function speakerOrderFromSegments(segments) {
   return seen
 }
 
-// Resolve a speaker label to a color string. First speaker (or no speaker
-// info) returns `defaultColor` so single-speaker videos render exactly as
-// before. Subsequent speakers cycle through SPEAKER_PALETTE.
-export function colorForSpeaker(speaker, speakerOrder, defaultColor) {
+// Resolve a speaker label to a color string. Priority:
+//   1. `overrides[speaker]` if set — explicit user choice in DesignControls.
+//   2. `defaultColor` for the first speaker (idx 0) or when no speaker info.
+//   3. SPEAKER_PALETTE cycling for subsequent speakers.
+// `overrides` is the `style.speakerColors` map; safe to omit (defaults to {}).
+export function colorForSpeaker(speaker, speakerOrder, defaultColor, overrides = {}) {
+  if (speaker && overrides && overrides[speaker]) return overrides[speaker]
   if (!speaker) return defaultColor
   const idx = speakerOrder.indexOf(speaker)
   if (idx <= 0) return defaultColor
