@@ -145,6 +145,15 @@ async def run_pipeline(
         state["language"] = result["language"]
         state["segments"] = segments
         write_job(state)
+
+        # audio.wav was a transcription scratchpad — Gemini got its own mp3,
+        # other providers consumed the wav directly. After success it's dead
+        # weight (~2 MB/min of audio). Safe to drop now. Best-effort delete:
+        # ignore if it was never written or was already cleaned.
+        try:
+            audio_path.unlink(missing_ok=True)
+        except OSError:
+            pass
     except Exception as e:
         # Re-read state in case write_job above succeeded for the failure point.
         state = read_job(job_id) or state

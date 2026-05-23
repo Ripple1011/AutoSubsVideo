@@ -93,6 +93,34 @@ def list_jobs(limit: int = 20) -> list[dict]:
     return out
 
 
+def cleanup_old_jobs(retention_days: int) -> int:
+    """Delete every job whose state file is older than `retention_days`.
+
+    Uses the JSON file's mtime as the age signal — so opening / re-rendering
+    a job (any write to its state) effectively resets the clock. Returns the
+    number of jobs deleted. A retention_days <= 0 disables cleanup entirely
+    (returns 0 without scanning).
+
+    Reuses delete_job() so the source video + derived audio + burned mp4
+    all go in one operation.
+    """
+    import time
+    if retention_days <= 0 or not JOBS.exists():
+        return 0
+    cutoff = time.time() - retention_days * 86400
+    removed = 0
+    for path in JOBS.glob("*.json"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                # job_id is the filename stem
+                delete_job(path.stem)
+                removed += 1
+        except OSError:
+            # File raced with another delete or got corrupted — skip and move on.
+            continue
+    return removed
+
+
 def delete_job(job_id: str) -> bool:
     """Remove a job's state file and its entire upload folder (source video
     + derived audio). Returns True if the job state existed before deletion,

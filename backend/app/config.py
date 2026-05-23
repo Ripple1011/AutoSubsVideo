@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Upload limits
     max_video_seconds: int = 600          # 10 min personal cap
 
+    # Retention. Jobs older than this many days (by job-state file mtime) get
+    # cleaned up — uploads folder + jobs JSON both removed. Sweep runs on
+    # startup and at the start of each GET /jobs, so no background task is
+    # needed. Set to 0 to disable cleanup entirely.
+    retention_days: int = 14              # env: RETENTION_DAYS
+
 
 def get_settings() -> Settings:
     return Settings()

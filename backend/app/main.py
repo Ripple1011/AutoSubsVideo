@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from .config import get_settings
 from .storage import (
     ALLOWED_EXTENSIONS,
+    cleanup_old_jobs,
     delete_job,
     list_jobs,
     new_job_id,
@@ -36,6 +37,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_sweep():
+    """One-shot retention sweep at boot. Quick to run, idempotent if there's
+    nothing to remove; logs how many jobs were cleaned for visibility.
+    """
+    settings = get_settings()
+    removed = cleanup_old_jobs(settings.retention_days)
+    if removed:
+        print(
+            f"[storage] startup retention sweep removed {removed} job(s) "
+            f"older than {settings.retention_days} days.",
+            flush=True,
+        )
 
 
 @app.get("/health")
@@ -150,7 +166,13 @@ async def upload(
 async def list_recent_jobs(limit: int = 20):
     """Recent jobs for the Recent Videos picker. Newest first, capped at
     `limit` (default 20). Each entry is a compact summary — no segments.
+
+    Sweeps stale jobs (older than settings.retention_days) before listing,
+    so the picker can't show entries that are about to disappear, and so
+    cleanup happens lazily on a route that gets hit anyway every time the
+    user opens the Recent dropdown.
     """
+    cleanup_old_jobs(get_settings().retention_days)
     return list_jobs(limit)
 
 
