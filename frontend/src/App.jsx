@@ -44,6 +44,11 @@ function loadSavedStyle() {
 export default function App() {
   const [videoUrl, setVideoUrl] = useState(null)
   const [segments, setSegments] = useState([])
+  // Snapshot of segments as loaded from the server / fresh upload. SubtitleSidebar's
+  // "Reset all" button hands this back through onEdit to undo any in-session edits
+  // (text + timing). Reference equality with `segments` tells us whether the user
+  // has touched anything — cheap, no deep compare needed.
+  const [originalSegments, setOriginalSegments] = useState([])
   const [jobId, setJobId] = useState(null)
   const [styleSchema, setStyleSchema] = useState(loadSavedStyle)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -61,6 +66,7 @@ export default function App() {
       throw new Error('Job not ready')
     }
     setSegments(job.segments)
+    setOriginalSegments(job.segments)
     setVideoUrl(`/api/jobs/${id}/video`)
     setJobId(id)
     setActiveIndex(-1)
@@ -94,6 +100,7 @@ export default function App() {
   const handleReady = ({ videoUrl, segments, jobId: newJobId }) => {
     setVideoUrl(videoUrl)
     setSegments(segments)
+    setOriginalSegments(segments)
     setJobId(newJobId)
     setActiveIndex(-1)
     if (newJobId) {
@@ -104,6 +111,7 @@ export default function App() {
   const handleNewVideo = () => {
     setVideoUrl(null)
     setSegments([])
+    setOriginalSegments([])
     setJobId(null)
     setActiveIndex(-1)
     localStorage.removeItem(LS_JOB)
@@ -164,6 +172,7 @@ export default function App() {
           <section className="border-r border-white/10 overflow-y-auto min-h-0">
             <SubtitleSidebar
               segments={segments}
+              originalSegments={originalSegments}
               activeIndex={activeIndex}
               onSelect={setActiveIndex}
               onEdit={setSegments}
