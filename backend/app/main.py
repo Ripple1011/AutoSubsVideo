@@ -206,6 +206,72 @@ async def job_status(job_id: str):
     return state
 
 
+@app.patch("/jobs/{job_id}")
+async def patch_job(job_id: str, body: dict):
+    """Persist user edits to a job's segments. Only `segments` is mutable
+    through this endpoint — other state fields (status, language,
+    filename, created_at) are immutable post-transcription. Used by the
+    frontend's debounced auto-save when the user nudges timing or edits
+    text in the sidebar.
+    """
+    state = read_job(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+
+    segments = body.get("segments")
+    if not isinstance(segments, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Request body must include a 'segments' list.",
+        )
+    # Each segment needs at least start / end / text. We tolerate extra
+    # fields (words[], speaker, is_song, phrase_end) and pass them through
+    # untouched so the rich Gemini metadata isn't lost.
+    cleaned: list[dict] = []
+    for s in segments:
+        if not isinstance(s, dict):
+            raise HTTPException(status_code=400, detail="Each segment must be an object.")
+        if not all(k in s for k in ("start", "end", "text")):
+            raise HTTPException(
+                status_code=400,
+                detail="Each segment must include start, end, and text.",
+            )
+        try:
+            start = float(s["start"])
+            end = float(s["end"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="start / end must be numbers.")
+        if end <= start:
+            raise HTTPException(status_code=400, detail="end must be greater than start.")
+        cleaned.append({**s, "start": start, "end": end, "text": str(s["text"])})
+
+    # Lazy-capture: jobs transcribed before segments_original existed don't
+    # have a Gemini-pristine snapshot. On the first PATCH we record the
+    # pre-edit state as the original so a future "Reset all" can revert
+    # to it. Jobs from the new pipeline already carry segments_original
+    # and won't enter this branch.
+    if "segments_original" not in state:
+        state["segments_original"] = state.get("segments") or []
+
+    # Bounded edit history for cross-refresh undo. Before overwriting the
+    # current segments, push the outgoing value onto segments_history and
+    # rotate so the list never grows past HISTORY_LIMIT. The frontend
+    # loads this list into the past undo stack on mount, giving Cmd+Z a
+    # working trail even after a hard refresh. Granularity is per-PATCH
+    # rather than per-click — auto-save debounces rapid clicks into one
+    # request — so this is a coarser undo than the in-session stack.
+    HISTORY_LIMIT = 10
+    prev_segments = state.get("segments")
+    if prev_segments:
+        history = state.get("segments_history") or []
+        history.append(prev_segments)
+        state["segments_history"] = history[-HISTORY_LIMIT:]
+
+    state["segments"] = cleaned
+    write_job(state)
+    return {"ok": True}
+
+
 @app.get("/jobs/{job_id}/video")
 async def job_video(job_id: str):
     """Stream the original uploaded video file for a job. Used by the

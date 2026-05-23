@@ -57,11 +57,19 @@ export default function SubtitleSidebar({ segments, originalSegments, activeInde
     <>
       {hasEdits && (
         <div className="px-3 py-2 border-b border-white/5 flex items-center justify-between bg-amber-500/5">
-          <span className="text-[11px] text-amber-200/70">Unsaved edits</span>
+          <span className="text-[11px] text-amber-200/70">
+            Edits saved · ⌘Z to undo
+          </span>
           <button
-            onClick={() => onEdit(originalSegments)}
+            onClick={() => {
+              const ok = window.confirm(
+                'Reset all edits to the Gemini-original transcript?\n\n' +
+                'You can still ⌘Z (Ctrl+Z on Windows/Linux) afterward to bring them back.'
+              )
+              if (ok) onEdit(originalSegments)
+            }}
             className="text-[11px] text-amber-200/80 hover:text-amber-100 hover:underline"
-            title="Restore segments to the originally transcribed values"
+            title="Restore every segment to the originally transcribed values"
           >
             ↻ Reset all
           </button>

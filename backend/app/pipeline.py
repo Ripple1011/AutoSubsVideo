@@ -144,6 +144,13 @@ async def run_pipeline(
         state["status"] = "ready"
         state["language"] = result["language"]
         state["segments"] = segments
+        # segments_original holds the Gemini-pristine values for the
+        # "Reset all" affordance in the sidebar. Only written once, here;
+        # PATCH /jobs/{id} never touches it. If we're re-running the
+        # pipeline on an existing job, preserve any prior original so
+        # earlier edits can still be reverted to the true first cut.
+        if "segments_original" not in state:
+            state["segments_original"] = segments
         write_job(state)
 
         # audio.wav was a transcription scratchpad — Gemini got its own mp3,
