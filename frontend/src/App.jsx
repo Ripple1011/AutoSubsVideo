@@ -15,6 +15,8 @@ const DEFAULT_STYLE = {
   highlightColor: '#aa3bff',
   highlightTransparent: false,   // when true, no background fill behind subtitle
   speakerColors: {},             // { "Speaker 2": "#ff5599", ... } — per-label overrides
+  karaokeEnabled: false,         // light each word as it's spoken via per-word timestamps
+  karaokeColor: '#ffe066',       // accent color for the active word when karaoke is on
   scale: 1.0,
   verticalAlignment: 'bottom',   // 'top' | 'center' | 'bottom'
   animation: 'fade',             // 'none' | 'fade' | 'slide' | 'pop'

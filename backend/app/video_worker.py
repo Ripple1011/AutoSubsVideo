@@ -230,18 +230,58 @@ def _build_ass(segments: list[dict], style: dict) -> str:
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
 
+    karaoke_enabled = bool(style.get("karaokeEnabled"))
+    karaoke_bgr = _hex_to_ass(style.get("karaokeColor") or "#ffe066")
+
     events: list[str] = []
     for s in segments:
         text = (s.get("text") or "").strip()
         if not text:
             continue
-        start = _ass_time(float(s["start"]))
-        end = _ass_time(float(s["end"]))
-        override = speaker_color_override(s.get("speaker"))
-        # ASS reserves `{`, `}`, and `\\` in dialogue text — escape them so
-        # user-typed punctuation doesn't break the parser.
-        safe = text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
-        events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{override}{safe}")
+        speaker_override = speaker_color_override(s.get("speaker"))
+        words = s.get("words") if karaoke_enabled else None
+
+        if karaoke_enabled and words and len(words) > 0:
+            # Per-word karaoke: emit one Dialogue line per word, each showing
+            # the full segment text but with the current word's color
+            # overridden via inline {\c}. libass sequences them across the
+            # segment's time range so the highlight follows playback.
+            #
+            # Speaker color (if any) is the BASE; karaokeColor is the ACTIVE
+            # word's color. After the active span we revert to the base via
+            # the speaker_override (or empty = Style's PrimaryColour).
+            for i, w in enumerate(words):
+                w_start = _ass_time(float(w.get("start", s["start"])))
+                w_end = _ass_time(float(w.get("end", s["end"])))
+                pieces: list[str] = [speaker_override]
+                for j, w2 in enumerate(words):
+                    w_text = (w2.get("text") or "").strip()
+                    safe = w_text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
+                    if j == i:
+                        # Color + 108% scale on both axes — the scale bump
+                        # keeps the karaoke effect visible even when the
+                        # active word's would-be speaker color happens to
+                        # coincide with karaokeColor (e.g., palette[0]
+                        # yellow vs default karaokeColor yellow).
+                        pieces.append(
+                            f"{{\\c{karaoke_bgr}\\fscx108\\fscy108}}{safe}"
+                            f"{{\\r}}{speaker_override}"
+                        )
+                    else:
+                        pieces.append(safe)
+                    if j < len(words) - 1:
+                        pieces.append(" ")
+                events.append(
+                    f"Dialogue: 0,{w_start},{w_end},Default,,0,0,0,,{''.join(pieces)}"
+                )
+        else:
+            # No karaoke (or no per-word data): single Dialogue per segment.
+            start = _ass_time(float(s["start"]))
+            end = _ass_time(float(s["end"]))
+            # ASS reserves `{`, `}`, and `\\` in dialogue text — escape them
+            # so user-typed punctuation doesn't break the parser.
+            safe = text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
+            events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{speaker_override}{safe}")
 
     return header + "\n".join(events) + "\n"
 

@@ -184,6 +184,35 @@ export default function DesignControls({ value, onChange, segments = [] }) {
         </div>
       </div>
 
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-white/70" title="Light each word as it's spoken">Karaoke</span>
+          <div className="flex gap-1">
+            {[
+              { val: true,  label: 'On' },
+              { val: false, label: 'Off' },
+            ].map((b) => (
+              <button
+                key={b.label}
+                onClick={() => set('karaokeEnabled', b.val)}
+                className={`px-3 py-1 rounded text-xs ${
+                  Boolean(value.karaokeEnabled) === b.val ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {value.karaokeEnabled && (
+          <ColorPicker
+            label="Active word"
+            value={value.karaokeColor}
+            onChange={(v) => set('karaokeColor', v)}
+          />
+        )}
+      </div>
+
       <label className="flex items-center justify-between gap-3">
         <span className="text-white/70">Scale</span>
         <input

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { FONT_STACKS } from './DesignControls'
 import { colorForSpeaker, speakerOrderFromSegments } from '../lib/speakerColors'
 
@@ -23,6 +23,11 @@ export default function VideoCanvas({
 }) {
   const videoRef = useRef(null)
   const [aspectRatio, setAspectRatio] = useState('9 / 16')
+  // Active word index *within the active segment* — drives the karaoke
+  // per-word highlight. -1 means no word is currently spoken (gap between
+  // words, or karaoke is off). Reset to -1 when the active segment changes
+  // or karaoke turns off.
+  const [activeWordIdx, setActiveWordIdx] = useState(-1)
   // Burn state for the canvas download button. Kept local rather than lifted
   // because the button is a self-contained shortcut: render + save, no modal
   // round-trip. The Export menu still has its own preview-modal flow.
@@ -88,7 +93,9 @@ export default function VideoCanvas({
 
   // Playback → flip activeIndex to whichever segment owns currentTime.
   // When no segment owns currentTime (leading silence, between-segment gaps),
-  // set activeIndex to -1 so the overlay can hide itself.
+  // set activeIndex to -1 so the overlay can hide itself. Also updates
+  // activeWordIdx for karaoke rendering — finds which word inside the
+  // active segment owns currentTime, or -1 if none does.
   const handleTimeUpdate = () => {
     const v = videoRef.current
     if (!v || segments.length === 0) return
@@ -97,6 +104,17 @@ export default function VideoCanvas({
     if (idx !== activeIndex) {
       onActiveChange(idx)   // -1 when no segment owns this moment
     }
+    if (!style.karaokeEnabled || idx === -1) {
+      if (activeWordIdx !== -1) setActiveWordIdx(-1)
+      return
+    }
+    const words = segments[idx]?.words || []
+    let wordIdx = -1
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i]
+      if (t >= w.start && t < w.end) { wordIdx = i; break }
+    }
+    if (wordIdx !== activeWordIdx) setActiveWordIdx(wordIdx)
   }
 
   const alignmentClass = {
@@ -137,27 +155,61 @@ export default function VideoCanvas({
           No video loaded
         </div>
       )}
-      {current && (
-        <div className={`absolute inset-0 flex justify-center pointer-events-none ${alignmentClass}`}>
-          <span
-            key={activeIndex}
-            className={`px-3 py-1 rounded text-center max-w-[90%] ${animClass}`}
-            style={{
-              fontFamily: font.stack,
-              color: colorForSpeaker(current.speaker, speakerOrder, style.textColor, style.speakerColors),
-              backgroundColor: style.highlightTransparent ? 'transparent' : style.highlightColor,
-              WebkitTextStroke: `2px ${style.outlineColor}`,
-              fontSize: `${2 * style.scale}rem`,
-              fontWeight: font.weight,
-              lineHeight: 1.15,
+      {current && (() => {
+        const baseColor = colorForSpeaker(current.speaker, speakerOrder, style.textColor, style.speakerColors)
+        const hasWords = Array.isArray(current.words) && current.words.length > 0
+        const karaoke = style.karaokeEnabled && hasWords
+        return (
+          <div className={`absolute inset-0 flex justify-center pointer-events-none ${alignmentClass}`}>
+            <span
+              key={activeIndex}
+              className={`px-3 py-1 rounded text-center max-w-[90%] ${animClass}`}
+              style={{
+                fontFamily: font.stack,
+                color: baseColor,
+                backgroundColor: style.highlightTransparent ? 'transparent' : style.highlightColor,
+                WebkitTextStroke: `2px ${style.outlineColor}`,
+                fontSize: `${2 * style.scale}rem`,
+                fontWeight: font.weight,
+                lineHeight: 1.15,
 
-              ['--anim-duration']: animDuration,
-            }}
-          >
-            {current.text}
-          </span>
-        </div>
-      )}
+                ['--anim-duration']: animDuration,
+              }}
+            >
+              {karaoke
+                ? current.words.map((w, i) => {
+                    const isActive = i === activeWordIdx
+                    return (
+                      // Space lives OUTSIDE the inline-block as a sibling
+                      // text node — keeping it inside the span gets swallowed
+                      // by the transform/scale on the active word and the
+                      // text-stroke on each glyph.
+                      <Fragment key={i}>
+                        {i > 0 && ' '}
+                        <span
+                          style={{
+                            // Color + slight scale-up make the active word
+                            // visible even when the speaker's auto-assigned
+                            // palette color happens to coincide with the
+                            // karaoke accent (e.g., default yellow vs
+                            // palette[0] yellow for Speaker 2).
+                            color: isActive ? style.karaokeColor : baseColor,
+                            display: 'inline-block',
+                            transform: isActive ? 'scale(1.08)' : 'scale(1)',
+                            transformOrigin: 'center 60%',
+                            transition: 'color 80ms linear, transform 80ms ease-out',
+                          }}
+                        >
+                          {w.text}
+                        </span>
+                      </Fragment>
+                    )
+                  })
+                : current.text}
+            </span>
+          </div>
+        )
+      })()}
       </div>
       {videoUrl && jobId && (
         <div className="flex justify-end items-center gap-3">
