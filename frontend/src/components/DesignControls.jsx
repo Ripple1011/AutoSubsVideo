@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import ColorPicker from './ColorPicker'
 import { SPEAKER_PALETTE, colorForSpeaker, speakerOrderFromSegments } from '../lib/speakerColors'
+import { STYLE_PRESETS, findActivePreset, applyPreset } from '../lib/stylePresets'
 
 // Each label maps to a multi-script stack. The browser resolves font-family
 // per codepoint, so Latin chars use the first font, Devanagari/Gujarati chars
@@ -64,8 +65,56 @@ export default function DesignControls({ value, onChange, segments = [] }) {
   const speakerOrder = useMemo(() => speakerOrderFromSegments(segments), [segments])
   const showSpeakerSection = speakerOrder.length >= 2
 
+  const activePreset = useMemo(() => findActivePreset(value), [value])
+
   return (
     <div className="p-4 space-y-4 text-sm">
+      <div className="space-y-2">
+        <div className="text-[11px] uppercase tracking-wide text-white/40">
+          Style Presets
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {STYLE_PRESETS.map((p) => {
+            const font = FONT_STACKS[p.style.font] || { stack: 'inherit', weight: 700 }
+            const isActive = activePreset?.id === p.id
+            return (
+              <button
+                key={p.id}
+                onClick={() => onChange(applyPreset(p, value))}
+                title={`Apply "${p.name}" preset`}
+                className={`
+                  flex items-center justify-center px-2 py-2 rounded transition-all
+                  ${isActive
+                    ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-[#0b0b0f]'
+                    : 'hover:bg-white/5 ring-1 ring-white/10'}
+                `}
+                style={{
+                  backgroundColor: p.style.highlightTransparent ? 'rgba(255,255,255,0.02)' : p.style.highlightColor,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: font.stack,
+                    fontWeight: font.weight,
+                    color: p.style.textColor,
+                    WebkitTextStroke: `0.5px ${p.style.outlineColor}`,
+                    fontSize: '0.95rem',
+                    lineHeight: 1,
+                  }}
+                >
+                  {p.name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="text-[10px] text-white/30">
+          {activePreset ? `Using ${activePreset.name}` : 'Custom — tweak any field below'}
+        </div>
+      </div>
+
+      <div className="border-t border-white/10 -mx-4" />
+
       <label className="flex items-center justify-between gap-3">
         <span className="text-white/70">Font</span>
         <select
