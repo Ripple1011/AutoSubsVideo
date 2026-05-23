@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from .config import get_settings
+from .fonts import ensure_fonts_present
 from .storage import (
     ALLOWED_EXTENSIONS,
     cleanup_old_jobs,
@@ -40,11 +41,22 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-async def startup_sweep():
-    """One-shot retention sweep at boot. Quick to run, idempotent if there's
-    nothing to remove; logs how many jobs were cleaned for visibility.
+async def startup_tasks():
+    """Boot-time housekeeping:
+      1. Make sure the bundled burn-in fonts are present on disk so libass
+         can find them via the `fontsdir=` filter argument (see
+         video_worker.burn_subtitles). Downloads are idempotent; the only
+         non-zero cost is the very first server boot.
+      2. Sweep stale jobs older than the configured retention window. Cheap
+         and silent when nothing's stale.
     """
     settings = get_settings()
+    downloaded, failed = ensure_fonts_present()
+    if downloaded:
+        print(
+            f"[fonts] startup fetched {downloaded} font(s); {failed} failed.",
+            flush=True,
+        )
     removed = cleanup_old_jobs(settings.retention_days)
     if removed:
         print(

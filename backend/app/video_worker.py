@@ -125,13 +125,15 @@ def burn_subtitles(
     FFmpeg overlays it. Audio is stream-copied (`-c:a copy`) so the only
     re-encode happens on the video track. Returns `out_path` on success.
 
-    Known caveat: the rendered font is whatever libass resolves via
-    fontconfig on the host machine. If the system doesn't have the named
-    font installed, libass falls back silently and the burn may differ
-    slightly from the in-browser preview.
+    `fontsdir=` points libass at the bundled TTFs in backend/data/fonts/
+    (populated lazily on server startup, see app/fonts.py). When a font is
+    not in that directory libass falls back to system fontconfig, so the
+    burn at worst matches the previous behavior — at best it matches the
+    in-browser preview exactly.
     """
     import subprocess
     from imageio_ffmpeg import get_ffmpeg_exe
+    from .fonts import FONTS_DIR
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -142,7 +144,7 @@ def burn_subtitles(
     cmd = [
         ffmpeg, "-y", "-loglevel", "error",
         "-i", video_path,
-        "-vf", f"ass={ass_path}",
+        "-vf", f"ass={ass_path}:fontsdir={FONTS_DIR}",
         "-c:a", "copy",
         str(out),
     ]
