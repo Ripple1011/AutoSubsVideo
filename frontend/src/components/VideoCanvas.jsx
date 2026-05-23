@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FONT_STACKS } from './DesignControls'
 import { colorForSpeaker, speakerOrderFromSegments } from '../lib/speakerColors'
 
 /**
- * 9:16 vertical preview canvas.
+ * Preview canvas. The container takes the source video's natural aspect
+ * ratio (read from the <video> element's intrinsic dimensions on
+ * loadedmetadata) so landscape and vertical sources both display their
+ * full frame instead of being cropped to a fixed shape. Falls back to 9:16
+ * before metadata loads so the layout doesn't shift between unloaded and
+ * loaded states for the canonical short-form case.
  *
- * Renders native <video> with a transparent overlay block on top.
- * The overlay text follows the video's currentTime (not whatever was
- * last clicked in the sidebar) — clicks scrub the video, playback
- * drives the active segment.
+ * Subtitle overlay sits on top via absolute positioning — clicks scrub
+ * the video, playback drives the active segment.
  */
 export default function VideoCanvas({
   videoUrl,
@@ -18,6 +21,14 @@ export default function VideoCanvas({
   style,
 }) {
   const videoRef = useRef(null)
+  const [aspectRatio, setAspectRatio] = useState('9 / 16')
+
+  const handleLoadedMetadata = (e) => {
+    const v = e.currentTarget
+    if (v.videoWidth > 0 && v.videoHeight > 0) {
+      setAspectRatio(`${v.videoWidth} / ${v.videoHeight}`)
+    }
+  }
 
   // Speakers in order of first appearance — used to map each speaker label
   // to a stable color slot.
@@ -67,14 +78,19 @@ export default function VideoCanvas({
   const animDuration = { fast: '160ms', normal: '280ms', slow: '480ms' }[style.animationSpeed] || '280ms'
 
   return (
-    <div className="relative aspect-[9/16] h-full max-h-[80vh] bg-black rounded-lg overflow-hidden">
+    <div
+      className="relative bg-black rounded-lg overflow-hidden max-h-[88vh] max-w-full"
+      style={{ aspectRatio }}
+    >
       {videoUrl ? (
         <video
           ref={videoRef}
           src={videoUrl}
           onTimeUpdate={handleTimeUpdate}
-          className="w-full h-full object-cover"
+          onLoadedMetadata={handleLoadedMetadata}
+          className="w-full h-full object-contain"
           controls
+          controlsList="nofullscreen"
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-white/30">

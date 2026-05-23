@@ -154,8 +154,13 @@ export default function App() {
       ) : !inWorkspace ? (
         <DropZone onReady={handleReady} />
       ) : (
-        <main className="flex-1 grid grid-cols-2 gap-0 min-h-0">
-          <section className="border-r border-white/10 overflow-y-auto">
+        // Three-column workspace. Center column gives the 9:16 preview its
+        // full vertical room (no DesignControls eating its bottom), so the
+        // canvas grows naturally on tall screens. Flanking columns scroll
+        // independently. Tracks shrink to `minmax(...)` floor on narrow
+        // windows so a smaller laptop still gets a usable layout.
+        <main className="flex-1 grid grid-cols-[minmax(16rem,22%)_1fr_minmax(18rem,28%)] gap-0 min-h-0">
+          <section className="border-r border-white/10 overflow-y-auto min-h-0">
             <SubtitleSidebar
               segments={segments}
               activeIndex={activeIndex}
@@ -163,19 +168,17 @@ export default function App() {
               onEdit={setSegments}
             />
           </section>
-          <section className="flex flex-col min-h-0">
-            <div className="flex-1 flex items-center justify-center bg-black/50 min-h-0">
-              <VideoCanvas
-                videoUrl={videoUrl}
-                segments={segments}
-                activeIndex={activeIndex}
-                onActiveChange={setActiveIndex}
-                style={styleSchema}
-              />
-            </div>
-            <div className="border-t border-white/10">
-              <DesignControls value={styleSchema} onChange={setStyleSchema} />
-            </div>
+          <section className="flex items-center justify-center bg-black/50 min-h-0 p-4">
+            <VideoCanvas
+              videoUrl={videoUrl}
+              segments={segments}
+              activeIndex={activeIndex}
+              onActiveChange={setActiveIndex}
+              style={styleSchema}
+            />
+          </section>
+          <section className="border-l border-white/10 overflow-y-auto min-h-0">
+            <DesignControls value={styleSchema} onChange={setStyleSchema} />
           </section>
         </main>
       )}
