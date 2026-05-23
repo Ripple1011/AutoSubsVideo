@@ -175,6 +175,7 @@ export default function App() {
               activeIndex={activeIndex}
               onActiveChange={setActiveIndex}
               style={styleSchema}
+              jobId={jobId}
             />
           </section>
           <section className="border-l border-white/10 overflow-y-auto min-h-0">
