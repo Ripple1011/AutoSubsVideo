@@ -7,9 +7,9 @@ No FFmpeg/MoviePy/ASR work runs inside request threads.
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
 from .config import get_settings
 from .fonts import ensure_fonts_present
@@ -38,6 +38,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Paths the shared-password middleware lets through without auth:
+#   /health            → liveness probe / uptime monitoring
+#   /jobs/{id}/video   → <video src=...> can't attach custom headers, so the
+#                        random 12-char job ID is the soft secret here
+#   /export/soft       → <a href> downloads, same constraint
+# Everything else requires the X-AutoSub-Password header to match
+# settings.shared_password when that setting is configured.
+_PUBLIC_GET_PATHS = ("/health",)
+
+
+def _is_public_request(method: str, path: str) -> bool:
+    if method != "GET":
+        return False
+    if path in _PUBLIC_GET_PATHS:
+        return True
+    if path.startswith("/export/soft"):
+        return True
+    if path.startswith("/jobs/") and path.endswith("/video"):
+        return True
+    return False
+
+
+@app.middleware("http")
+async def shared_password_gate(request: Request, call_next):
+    """Reject requests without the shared password header when the gate is
+    configured. No-op when SHARED_PASSWORD is unset (localhost dev).
+    """
+    settings = get_settings()
+    if not settings.shared_password:
+        return await call_next(request)
+    if _is_public_request(request.method, request.url.path):
+        return await call_next(request)
+    header = request.headers.get("x-autosub-password", "")
+    if header != settings.shared_password:
+        return JSONResponse(
+            {"detail": "Unauthorized — set the AutoSub password in the prompt."},
+            status_code=401,
+        )
+    return await call_next(request)
 
 
 @app.on_event("startup")

@@ -1,0 +1,22 @@
+[Unit]
+Description=AutoSub FastAPI (uvicorn)
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/autosub/backend
+EnvironmentFile=/root/autosub/backend/.env
+# 127.0.0.1 only — nginx proxies public traffic. Never bind 0.0.0.0 or the
+# backend's password gate gets bypassed via direct port hits.
+ExecStart=/root/autosub/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=3
+# Send stdout / stderr to journalctl so `journalctl -u autosub -f` tails logs.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

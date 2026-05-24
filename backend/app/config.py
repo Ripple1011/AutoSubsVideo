@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     # needed. Set to 0 to disable cleanup entirely.
     retention_days: int = 14              # env: RETENTION_DAYS
 
+    # Single-password gate for the API. When set, every mutating + listing
+    # route requires an `X-AutoSub-Password` header matching this value.
+    # Bypass paths (see main.py middleware): /health, /jobs/{id}/video,
+    # and /export/soft — they're either monitoring or bytes-only downloads
+    # that can't attach custom headers (the random 12-char job ID is the
+    # soft secret in those cases). Leave unset for localhost dev; REQUIRED
+    # for any internet-reachable deployment that uses a server-side
+    # Gemini key (otherwise random visitors burn through your quota).
+    shared_password: str | None = None    # env: SHARED_PASSWORD
+
 
 def get_settings() -> Settings:
     return Settings()
