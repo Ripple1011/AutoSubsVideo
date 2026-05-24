@@ -2,11 +2,17 @@
 
 Target: **Ubuntu 24.04**, root access, IP-only (no domain yet). Architecture is `nginx → uvicorn (systemd) → FastAPI`; the frontend builds to static files served by nginx. Source of truth is GitHub `main`; the VPS pulls from there.
 
+**Ports** — AutoSub is configured to coexist with other apps on the same VPS:
+- nginx serves the AutoSub frontend on **`:8080`** (not the default `:80`).
+- uvicorn (FastAPI) binds to **`127.0.0.1:8001`** (not the default `:8000`).
+
+If your VPS has `:80` and `:8000` free and you'd prefer AutoSub on those, edit `deploy/nginx.conf` (the `listen` directive + `proxy_pass`) and `deploy/autosub.service` (the `--port` flag) before running `setup.sh`. The whole stack is just those two port references.
+
 ```
 [ your laptop ] ── git push ──→ [ GitHub main ] ── ssh + pull ──→ [ Hostinger VPS ]
-                                                                   nginx :80
+                                                                   nginx :8080
                                                                      ↓
-                                                                   uvicorn :8000
+                                                                   uvicorn :8001
                                                                      ↓
                                                                    data/uploads/
                                                                    data/jobs/
@@ -68,9 +74,18 @@ systemctl status autosub          # should say "active (running)"
 journalctl -u autosub -n 30       # check the boot log
 ```
 
-### f. Visit it
+### f. Open the port in the firewall (if ufw is enabled)
 
-Open `http://<your-vps-ip>/` in any browser. You'll be prompted for the shared password the first time. After that it's stored in your browser's localStorage and sent on every API call.
+```bash
+ufw status                  # check if active
+ufw allow 8080/tcp          # only if ufw is active
+```
+
+If ufw isn't installed/active, Hostinger's network already allows arbitrary ports; nothing extra needed.
+
+### g. Visit it
+
+Open `http://<your-vps-ip>:8080/` in any browser. You'll be prompted for the shared password the first time. After that it's stored in your browser's localStorage and sent on every API call.
 
 ---
 
@@ -133,16 +148,15 @@ Once you point a domain (or subdomain) at the VPS:
 
 ## 5. Firewall
 
-Open only what nginx needs:
+If ufw is in use, open AutoSub's port:
 
 ```bash
-ufw allow ssh
-ufw allow 80/tcp
-ufw allow 443/tcp     # for when you add SSL
-ufw enable
+ufw allow 8080/tcp
 ```
 
-Do NOT open port `8000`. The backend listens on `127.0.0.1` only — nginx is the only thing that talks to it. Opening 8000 publicly would let visitors bypass nginx and the password gate.
+Do NOT open port `8001`. The backend listens on `127.0.0.1` only — nginx is the only thing that talks to it. Opening 8001 publicly would let visitors bypass nginx and the password gate.
+
+If you later add a domain + SSL, open 443/tcp instead and migrate AutoSub onto :80/:443.
 
 ---
 
@@ -159,7 +173,7 @@ Do NOT open port `8000`. The backend listens on `127.0.0.1` only — nginx is th
 
 ## 7. Troubleshooting
 
-- **502 Bad Gateway from nginx** — backend isn't running. `systemctl status autosub` and `journalctl -u autosub -n 50`.
+- **502 Bad Gateway from nginx** — backend isn't running, OR uvicorn is bound to a different port than nginx is proxying to. Confirm uvicorn is on `:8001` (`ss -ltnp | grep 8001`) and nginx's `proxy_pass` matches (`grep proxy_pass /etc/nginx/sites-available/autosub`). Then `systemctl status autosub` and `journalctl -u autosub -n 50`.
 - **401 Unauthorized in the browser** — password mismatch. Clear the site's `localStorage` (DevTools → Application → Local Storage → delete `autosub.password`) and refresh, you'll be re-prompted. Or edit `backend/.env` and restart the service.
 - **Burn fails with "fonts not found"** — first startup downloads fonts; check `ls /root/autosub/backend/data/fonts/`. If empty, look at `journalctl -u autosub` for `[fonts] WARNING:` lines indicating which URLs failed.
 - **Disk full** — check `du -sh /root/autosub/backend/data/uploads/*`. Lower `RETENTION_DAYS` in env and restart, or wipe manually.

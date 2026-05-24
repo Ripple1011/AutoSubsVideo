@@ -70,9 +70,12 @@ systemctl enable autosub
 
 echo
 echo "=== [6/6] nginx vhost ==="
+# Add as a NEW vhost — won't touch any existing sites already enabled on
+# this VPS. AutoSub listens on :8080 to avoid clashing with anything on
+# :80. Don't remove sites-enabled/default here; another app may rely on
+# it and the script needs to coexist with whatever's already deployed.
 cp "$REPO_DIR/deploy/nginx.conf" /etc/nginx/sites-available/autosub
 ln -sf /etc/nginx/sites-available/autosub /etc/nginx/sites-enabled/autosub
-rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
 
@@ -111,10 +114,13 @@ NEXT STEPS:
 
   3. Verify it came up:
        systemctl status autosub
-       curl -s http://127.0.0.1:8000/health | head
+       curl -s http://127.0.0.1:8001/health | head
 
-  4. Visit your site:
-       http://${PUBLIC_IP}/
+  4. Open port 8080 in the firewall (if ufw is enabled):
+       ufw allow 8080/tcp
+
+  5. Visit your site:
+       http://${PUBLIC_IP}:8080/
 
   To deploy updates later, just run:
        /root/autosub/deploy/update.sh
