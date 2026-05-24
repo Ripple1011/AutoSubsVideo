@@ -20,6 +20,11 @@ npm install
 npm run build
 cd "$REPO_DIR"
 
+# Re-apply the world-read perms on dist/ since vite wipes the dir on
+# each build. setup.sh added /root + /root/autosub +x traversal once;
+# only the dist contents need refreshing now.
+chmod -R o+r /root/autosub/frontend/dist 2>/dev/null || true
+
 echo "=== restart systemd unit ==="
 systemctl restart autosub
 sleep 1

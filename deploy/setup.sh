@@ -61,6 +61,13 @@ npm install
 npm run build
 cd "$REPO_DIR"
 
+# nginx runs as www-data and can't traverse into /root by default (root's
+# home is mode 700). Open just the directory chain down to dist/ for
+# traversal + read; the .env file inside backend/ stays mode 600 so its
+# secrets are still inaccessible to www-data.
+chmod o+x /root /root/autosub /root/autosub/frontend /root/autosub/frontend/dist 2>/dev/null || true
+chmod -R o+r /root/autosub/frontend/dist 2>/dev/null || true
+
 echo
 echo "=== [5/6] systemd unit ==="
 cp "$REPO_DIR/deploy/autosub.service" /etc/systemd/system/autosub.service
