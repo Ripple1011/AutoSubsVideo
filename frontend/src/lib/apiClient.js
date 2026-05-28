@@ -102,3 +102,10 @@ export async function uploadFile(file, language, prompt = '', startOffset = 0) {
   if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
   return data
 }
+
+// --- Thumbnail URL ----------------------------------------------------------
+// Used by the Projects-list cards. The shared-password gate allows this
+// path without an `X-AutoSub-Password` header (see _PUBLIC_GET_PATHS in
+// main.py), so a raw <img src=...> works even when the user is "logged in"
+// only via cookie/header.
+export const jobThumbUrl = (id) => `/api/jobs/${id}/thumb`

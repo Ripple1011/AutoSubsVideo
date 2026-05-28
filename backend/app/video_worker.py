@@ -39,6 +39,44 @@ def extract_audio(video_path: str, out_path: str, start_offset: float = 0.0) -> 
     return out_path
 
 
+def extract_thumbnail(video_path: str, out_path: str, at_seconds: float = 1.0) -> str:
+    """Grab a single frame at `at_seconds` as a JPEG for the Projects-list card.
+
+    Cheap — single FFmpeg invocation that decodes only to the seek point.
+    Falls back to t=0 when at_seconds is past the video duration.
+    """
+    import subprocess
+    from imageio_ffmpeg import get_ffmpeg_exe
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    ffmpeg = get_ffmpeg_exe()
+    cmd = [
+        ffmpeg, "-y", "-loglevel", "error",
+        "-ss", f"{at_seconds:.2f}",
+        "-i", video_path,
+        "-frames:v", "1",
+        "-q:v", "5",                  # JPEG quality (1-31; 5 is good)
+        "-vf", "scale=480:-2",        # cap thumb width at 480px
+        out_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        return out_path
+    # Retry from t=0 — short videos can fail to seek past their duration.
+    cmd_fallback = [
+        ffmpeg, "-y", "-loglevel", "error",
+        "-i", video_path,
+        "-frames:v", "1",
+        "-q:v", "5",
+        "-vf", "scale=480:-2",
+        out_path,
+    ]
+    result2 = subprocess.run(cmd_fallback, capture_output=True, text=True)
+    if result2.returncode != 0:
+        raise RuntimeError(f"ffmpeg thumbnail failed: {result2.stderr.strip()}")
+    return out_path
+
+
 def chunk_audio(
     audio_path: str,
     chunk_seconds: float = 25.0,

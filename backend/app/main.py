@@ -57,7 +57,7 @@ def _is_public_request(method: str, path: str) -> bool:
         return True
     if path.startswith("/export/soft"):
         return True
-    if path.startswith("/jobs/") and path.endswith("/video"):
+    if path.startswith("/jobs/") and (path.endswith("/video") or path.endswith("/thumb")):
         return True
     return False
 
@@ -336,6 +336,20 @@ async def job_video(job_id: str):
             detail=f"Source video missing for job '{job_id}'.",
         )
     return FileResponse(candidates[0])
+
+
+@app.get("/jobs/{job_id}/thumb")
+async def job_thumb(job_id: str):
+    """Serve the JPEG thumbnail captured during pipeline extraction. 404 when
+    the thumb is missing (older jobs that pre-date thumbnail generation, or
+    failed extractions). The frontend falls back to a status badge in that
+    case, so a 404 here is non-fatal.
+    """
+    folder = upload_dir(job_id)
+    path = folder / "thumb.jpg"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not available.")
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @app.get("/export/soft")

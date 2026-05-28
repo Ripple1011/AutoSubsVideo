@@ -184,34 +184,57 @@ export default function DesignControls({ value, onChange, segments = [] }) {
         </div>
       </div>
 
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-white/70" title="Light each word as it's spoken">Karaoke</span>
-          <div className="flex gap-1">
-            {[
-              { val: true,  label: 'On' },
-              { val: false, label: 'Off' },
-            ].map((b) => (
-              <button
-                key={b.label}
-                onClick={() => set('karaokeEnabled', b.val)}
-                className={`px-3 py-1 rounded text-xs ${
-                  Boolean(value.karaokeEnabled) === b.val ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                {b.label}
-              </button>
-            ))}
+      {(() => {
+        // Karaoke only works when the transcription has per-word timestamps.
+        // Only Gemini emits these; Sarvam/Groq/OpenAI return segment-level only.
+        // Disable the toggle (and force it off) when none of the loaded
+        // segments carry a `words[]` array, with a one-line explanation.
+        const hasWordTimestamps = segments.some(
+          (s) => Array.isArray(s?.words) && s.words.length > 0
+        )
+        const disableTitle = hasWordTimestamps
+          ? "Light each word as it's spoken"
+          : 'Word-level karaoke requires Gemini transcription. Re-upload with Gemini to enable.'
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-white/70" title={disableTitle}>Karaoke</span>
+              <div className="flex gap-1">
+                {[
+                  { val: true,  label: 'On' },
+                  { val: false, label: 'Off' },
+                ].map((b) => (
+                  <button
+                    key={b.label}
+                    disabled={!hasWordTimestamps}
+                    onClick={() => set('karaokeEnabled', b.val)}
+                    title={disableTitle}
+                    className={`px-3 py-1 rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed ${
+                      Boolean(value.karaokeEnabled) === b.val ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {!hasWordTimestamps && (
+              <div className="text-[10px] text-white/40 leading-snug">
+                Word timestamps not available for this transcription.
+                Re-upload with <span className="font-mono">gemini-2.5-flash</span> or
+                <span className="font-mono"> gemini-2.5-pro</span> to enable karaoke.
+              </div>
+            )}
+            {value.karaokeEnabled && hasWordTimestamps && (
+              <ColorPicker
+                label="Active word"
+                value={value.karaokeColor}
+                onChange={(v) => set('karaokeColor', v)}
+              />
+            )}
           </div>
-        </div>
-        {value.karaokeEnabled && (
-          <ColorPicker
-            label="Active word"
-            value={value.karaokeColor}
-            onChange={(v) => set('karaokeColor', v)}
-          />
-        )}
-      </div>
+        )
+      })()}
 
       <label className="flex items-center justify-between gap-3">
         <span className="text-white/70">Scale</span>

@@ -251,19 +251,19 @@ async def _transcribe_gemini(
         )
 
     mp3_size = mp3_path.stat().st_size
-    print(f"[gemini] mp3 encode={t1-t0:.2f}s  mp3_size={mp3_size/1024:.0f}KB", flush=True)
+    print(f"[gemini:{model}] mp3 encode={t1-t0:.2f}s  mp3_size={mp3_size/1024:.0f}KB", flush=True)
 
     async with httpx.AsyncClient(timeout=180.0) as client:
         t2 = time.perf_counter()
         file_uri, mime = await _gemini_upload_file(client, api_key, mp3_path)
         t3 = time.perf_counter()
-        print(f"[gemini] files-api upload={t3-t2:.2f}s", flush=True)
+        print(f"[gemini:{model}] files-api upload={t3-t2:.2f}s", flush=True)
 
         out = await _gemini_generate(
             client, api_key, model, file_uri, mime, language, prompt,
         )
         t4 = time.perf_counter()
-        print(f"[gemini] generateContent={t4-t3:.2f}s  total={t4-t0:.2f}s", flush=True)
+        print(f"[gemini:{model}] generateContent={t4-t3:.2f}s  total={t4-t0:.2f}s", flush=True)
         return out
 
 

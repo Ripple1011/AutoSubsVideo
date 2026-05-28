@@ -40,11 +40,12 @@ they go through a legacy path that splits at punctuation with proportional
 time distribution.
 """
 
+import asyncio
 import statistics
 from pathlib import Path
 
 from .storage import read_job, write_job
-from .video_worker import extract_audio, probe_duration
+from .video_worker import extract_audio, extract_thumbnail, probe_duration
 from .whisper_client import (
     _is_abbreviation_period,
     distribute_phrases,
@@ -112,7 +113,27 @@ async def run_pipeline(
         state["status"] = "extracting"
         write_job(state)
         audio_path = src.parent / "audio.wav"
-        extract_audio(str(src), str(audio_path), start_offset=state.get("start_offset", 0.0))
+        thumb_path = src.parent / "thumb.jpg"
+
+        # Audio + thumbnail are independent FFmpeg subprocesses — run them
+        # concurrently via to_thread so the second one doesn't add wall-clock
+        # time. Thumbnail is best-effort: if it fails, the rest of the pipeline
+        # still completes; the Projects card just falls back to a status badge.
+        def _safe_thumb():
+            try:
+                extract_thumbnail(str(src), str(thumb_path), at_seconds=1.0)
+            except Exception as e:
+                print(f"[pipeline] thumbnail extraction failed for {job_id}: {e}", flush=True)
+
+        await asyncio.gather(
+            asyncio.to_thread(
+                extract_audio,
+                str(src),
+                str(audio_path),
+                state.get("start_offset", 0.0),
+            ),
+            asyncio.to_thread(_safe_thumb),
+        )
         audio_duration = probe_duration(str(audio_path))
 
         state["status"] = "transcribing"
