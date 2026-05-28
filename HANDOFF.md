@@ -5,6 +5,137 @@ Both AI agents update this file at end of session. Read before starting.
 
 ---
 
+## 2026-05-28 (late night) · Windows agent — Slice 3b (pre-Razorpay): Plans + Admin + Pricing + Account
+
+**Landed:**
+- `plans` table in `users.db`. Stores tier definitions (slug,
+  display_name, description, credits_granted, price_inr_paise, cadence,
+  rollover_cap, razorpay_plan_id, active, sort_order). Seeded on first
+  boot with the 4 starter tiers (idempotent — admin edits survive).
+- Public endpoint `GET /plans` returns active plans for `/pricing`.
+- Superuser-only CRUD on `/admin/plans`:
+  - `GET /admin/plans` — list everything (active + inactive).
+  - `POST /admin/plans` — create new plan.
+  - `PATCH /admin/plans/{id}` — edit. `slug` and `cadence` are
+    immutable (changing them mid-flight orphans active subscriptions).
+  - `DELETE /admin/plans/{id}` — hard-delete (refused if
+    razorpay_plan_id is set).
+- `current_superuser` dependency in auth.py (active=True + superuser=True).
+- New routes:
+  - `/pricing` — public 4-card layout. "Coming soon" buttons until
+    payment integration is live. Amber banner explains the wait.
+  - `/account` — credit balance + grant history table + subscription
+    placeholder. "Get more credits" CTA → /pricing.
+  - `/admin/plans` — full edit table per row. Slug + cadence locked
+    (greyed display); display_name / description / credits_granted /
+    price_inr / rollover_cap / sort_order / active are editable. Save
+    button activates only when the row is dirty. Backend rejects
+    non-superusers with 403; UI shows a friendly message before the
+    round-trip.
+- DropZone empty-state banner appears when balance===0, with a "See
+  plans" button → /pricing. Generate button disabled.
+- Top-bar avatar dropdown now offers: Account & credits / Pricing /
+  Manage plans (admin only) / Log out.
+
+**Payment provider pivot — Stripe → Razorpay:**
+
+Stripe India is invite-only and has poor UPI subscription support. We
+switched to Razorpay before writing any Stripe code, so the integration
+slice ahead is clean.
+
+- All references to "stripe" in code + comments renamed:
+  - DB column `stripe_price_id` → `razorpay_plan_id` (drop+recreated
+    the table; no data lost since only seed rows existed).
+  - DB column `stripe_ref` on credit_grants → `payment_ref`
+    (provider-agnostic on purpose, in case we add Stripe-International
+    later for non-IN users).
+  - UI strings and code comments updated.
+- Scope is **India-only v1**. Razorpay handles UPI (most common
+  payment method in India), cards, netbanking, wallets, and
+  subscriptions with UPI Autopay mandates. No multi-currency support
+  in v1; if we ever want US/EU customers we add Stripe as a second
+  provider then.
+
+**Decisions baked in:**
+- Pricing stored in **paise** (₹49.00 = 4900) — integer math, no
+  float drift.
+- Slug + cadence are immutable post-creation. Other fields are admin-
+  editable any time.
+- `purchasable = bool(razorpay_plan_id)`. UI uses this single boolean
+  to decide whether the Buy button is enabled.
+- Superuser flag is the admin gate. Anyone manually promoted via the
+  DB can access /admin/plans; new signups are NOT superuser by default.
+- Razorpay plan IDs follow Razorpay conventions: `plan_XXXX` for
+  subscriptions, sentinel `"one_time:pack_10"` (or similar) for packs
+  since Razorpay doesn't need pre-created plan objects for one-time
+  Orders.
+
+**Files added:**
+- `backend/app/plans.py`
+- `frontend/src/routes/Pricing.jsx`
+- `frontend/src/routes/Account.jsx`
+- `frontend/src/routes/AdminPlans.jsx`
+
+**Files modified:**
+- `backend/app/main.py` — `/plans` + `/admin/plans*` + uuid import + seed call
+- `backend/app/auth.py` — current_superuser dependency
+- `backend/app/credits.py` — column rename
+- `frontend/src/App.jsx` — dropdown items
+- `frontend/src/components/DropZone.jsx` — empty-state banner
+- `frontend/src/main.jsx` — three new routes wired
+
+**Queued for Slice 3b-continued (when Razorpay creds arrive):**
+- Install `razorpay` Python SDK + add to requirements.txt
+- Config: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
+- `POST /admin/plans/{id}/sync-to-razorpay`:
+  - For packs (cadence=one_time): set razorpay_plan_id to a sentinel
+    like `"one_time:{slug}"`; no Razorpay API call required (Orders
+    are created per-checkout).
+  - For subscriptions (monthly/annual): call `client.plan.create()` to
+    create a Razorpay Plan, store the returned `plan_XXXX` id.
+- `POST /checkout/{slug}`:
+  - Pack: create a Razorpay Order via `client.order.create()` for
+    amount = plan.price_inr_paise. Return `{order_id, key_id,
+    amount, currency: 'INR', name, prefill_email}` so the frontend
+    can open Razorpay Checkout.
+  - Subscription: create a Razorpay Subscription via
+    `client.subscription.create()` with the plan_id. Return
+    `{subscription_id, key_id, ...}`.
+- Frontend Pricing card "Buy" button:
+  - POST to /checkout/{slug}, get back checkout config.
+  - Load Razorpay Checkout JS (`<script src="https://checkout.razorpay.com/v1/checkout.js">`).
+  - Open `new Razorpay({...}).open()` with the config.
+  - On success handler: POST verification to backend, then redirect
+    to /account.
+- `POST /razorpay/webhook`:
+  - Verify signature with RAZORPAY_WEBHOOK_SECRET.
+  - Handle `payment.captured` (one-time pack) → grant credits.
+  - Handle `subscription.charged` (monthly/annual renewal) → grant
+    credits using plan's credits_granted.
+  - Handle `subscription.cancelled` → no more grants; existing
+    credits stay.
+  - Idempotency: dedupe via payment_id stored in payment_ref.
+- Account page additions:
+  - Active subscription card (plan name, next billing date, cancel
+    link via Razorpay customer portal or via in-app PATCH endpoint).
+- Admin page additions:
+  - "Sync to Razorpay" button per row (creates Plan via API).
+  - "Create new plan" row at bottom (calls POST /admin/plans).
+
+**You need to (parallel work):**
+1. Sign up at razorpay.com.
+2. Complete KYC (PAN + business proof). Test mode works immediately.
+3. Save Test Key ID + Test Key Secret. You'll paste into .env when
+   we wire Slice 3b-continued.
+4. Test webhook setup happens later (Razorpay generates a webhook
+   secret you'll add).
+
+**Deployed to VPS:** NO. Same OAuth-domain blocker as before. Also
+applies to Razorpay — webhooks need a public HTTPS URL, so VPS deploy
++ domain + HTTPS must precede Razorpay live mode.
+
+---
+
 ## 2026-05-28 (night) · Windows agent — Slice 3a: Credits + 60s cap + managed Gemini
 
 **Landed:**

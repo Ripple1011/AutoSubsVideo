@@ -83,8 +83,28 @@ export default function App() {
                     {user.email}
                   </div>
                   <button
-                    onClick={() => { setUserMenuOpen(false); handleLogout() }}
+                    onClick={() => { setUserMenuOpen(false); navigate('/account') }}
                     className="block w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5"
+                  >
+                    Account & credits
+                  </button>
+                  <button
+                    onClick={() => { setUserMenuOpen(false); navigate('/pricing') }}
+                    className="block w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5"
+                  >
+                    Pricing
+                  </button>
+                  {user.is_superuser && (
+                    <button
+                      onClick={() => { setUserMenuOpen(false); navigate('/admin/plans') }}
+                      className="block w-full text-left px-3 py-2 text-sm text-purple-300 hover:bg-white/5 border-t border-white/10"
+                    >
+                      Manage plans (admin)
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setUserMenuOpen(false); handleLogout() }}
+                    className="block w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5 border-t border-white/10"
                   >
                     Log out
                   </button>

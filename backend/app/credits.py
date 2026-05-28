@@ -55,9 +55,12 @@ class CreditGrant(Base):
         default=lambda: datetime.now(timezone.utc),
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Stripe payment intent / subscription id, when the grant came from a
-    # purchase. Null for signup bonuses, refunds, etc.
-    stripe_ref: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Razorpay payment / subscription id, when the grant came from a
+    # purchase. Null for signup bonuses, refunds, etc. The "razorpay_"
+    # prefix isn't baked into the column name in case we ever add a second
+    # provider (Stripe for non-IN users); the provider is inferred from
+    # the value's prefix (rzp_*, sub_*, order_*, pay_*).
+    payment_ref: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
 
 # ----- Read paths ----------------------------------------------------------
@@ -107,7 +110,7 @@ async def grant_credits(
     credits: int,
     *,
     expires_at: Optional[datetime] = None,
-    stripe_ref: Optional[str] = None,
+    payment_ref: Optional[str] = None,
     session: Optional[AsyncSession] = None,
 ) -> CreditGrant:
     """Issue a new credit grant. Caller may pass an existing session (to fold
@@ -120,7 +123,7 @@ async def grant_credits(
             credits_granted=credits,
             credits_remaining=credits,
             expires_at=expires_at,
-            stripe_ref=stripe_ref,
+            payment_ref=payment_ref,
         )
         s.add(grant)
         await s.flush()

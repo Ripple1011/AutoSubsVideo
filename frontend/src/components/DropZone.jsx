@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { uploadFile, api } from '../lib/apiClient'
 import { useCredits } from '../hooks/useCredits'
 
@@ -23,6 +24,7 @@ export default function DropZone({ onReady }) {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState(null)
   const { balance, refresh: refreshCredits } = useCredits()
+  const navigate = useNavigate()
 
   const pick = (f) => {
     if (!f) return
@@ -142,9 +144,21 @@ export default function DropZone({ onReady }) {
           }`}>{status.msg}</div>
         )}
 
+        {balance === 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-100 text-sm px-4 py-3 text-center space-y-2">
+            <div>You're out of credits. Top up to keep transcribing.</div>
+            <button
+              onClick={() => navigate('/pricing')}
+              className="px-4 py-1.5 rounded-full bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-semibold"
+            >
+              See plans
+            </button>
+          </div>
+        )}
+
         <div className="text-center">
           <button
-            disabled={busy || !file}
+            disabled={busy || !file || balance === 0}
             onClick={handleGenerate}
             className="px-6 py-3 rounded-full bg-purple-500 hover:bg-purple-400 disabled:bg-white/10 disabled:text-white/40 font-semibold"
           >

@@ -228,6 +228,9 @@ current_active_user = fastapi_users.current_user(active=True)
 # Optional variant: returns None instead of 401. Used by /health-style
 # endpoints that work for guests AND authed users.
 current_user_optional = fastapi_users.current_user(active=True, optional=True)
+# Superuser gate: required for any /admin/* endpoint. 401 if not authed;
+# 403 if authed but not is_superuser.
+current_superuser = fastapi_users.current_user(active=True, superuser=True)
 
 
 # ----- Legacy-job claim ----------------------------------------------------

@@ -7,6 +7,9 @@ import ProjectsList from './routes/ProjectsList.jsx'
 import NewProject from './routes/NewProject.jsx'
 import Workspace from './routes/Workspace.jsx'
 import Login from './routes/Login.jsx'
+import Pricing from './routes/Pricing.jsx'
+import Account from './routes/Account.jsx'
+import AdminPlans from './routes/AdminPlans.jsx'
 import RequireAuth from './components/RequireAuth.jsx'
 
 /**
@@ -34,6 +37,9 @@ createRoot(document.getElementById('root')).render(
             <Route path="/projects" element={<ProjectsList />} />
             <Route path="/projects/new" element={<NewProject />} />
             <Route path="/projects/:id" element={<Workspace />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/account" element={<Account />} />
+            <Route path="/admin/plans" element={<AdminPlans />} />
             <Route path="*" element={<Navigate to="/projects" replace />} />
           </Route>
         </Route>

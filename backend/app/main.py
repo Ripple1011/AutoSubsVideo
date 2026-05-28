@@ -5,6 +5,7 @@ No FFmpeg/MoviePy/ASR work runs inside request threads.
 """
 
 import shutil
+import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, UploadFile, File, Form, Header, HTTPException, Request
@@ -16,6 +17,7 @@ from .auth import (
     claim_orphans_if_first_user,
     create_db_and_tables,
     current_active_user,
+    current_superuser,
     fastapi_users,
     google_oauth_client,
     _jwt_secret,
@@ -26,6 +28,7 @@ from .credits import (
     get_history,
     refund_credit,
 )
+from . import plans as plans_module
 from .config import get_settings
 from .fonts import ensure_fonts_present
 from .schemas import UserRead, UserCreate, UserUpdate
@@ -66,7 +69,7 @@ app.add_middleware(
 #   /users/me          → frontend calls this to detect login state
 # Everything else requires the X-AutoSub-Password header to match
 # settings.shared_password when that setting is configured.
-_PUBLIC_GET_PATHS = ("/health", "/users/me")
+_PUBLIC_GET_PATHS = ("/health", "/users/me", "/plans")
 
 
 def _is_public_request(method: str, path: str) -> bool:
@@ -118,6 +121,9 @@ async def startup_tasks():
     settings = get_settings()
     await create_db_and_tables()
     _jwt_secret()   # generates + persists if missing
+    created = await plans_module.seed_plans_if_missing()
+    if created:
+        print(f"[plans] seeded {created} starter plan(s).", flush=True)
     downloaded, failed = ensure_fonts_present()
     if downloaded:
         print(
@@ -208,6 +214,134 @@ async def my_credits(user=Depends(current_active_user)):
         balance = await get_balance(user.id, session)
         history = await get_history(user.id, session)
     return {"balance": balance, "history": history}
+
+
+# ----- Plans (public read + superuser CRUD) ----------------------------------
+
+@app.get("/plans", tags=["plans"])
+async def public_plans():
+    """Active plans for the /pricing page. Anyone (authed or not when the
+    shared-password gate is off) can read this — the prices are public."""
+    from .auth import async_session_maker
+    async with async_session_maker() as session:
+        rows = await plans_module.list_active(session)
+    return {"plans": [plans_module.to_dict(p) for p in rows]}
+
+
+@app.get("/admin/plans", tags=["admin"])
+async def admin_list_plans(_=Depends(current_superuser)):
+    """All plans (including inactive) for the admin management UI."""
+    from .auth import async_session_maker
+    async with async_session_maker() as session:
+        rows = await plans_module.list_all(session)
+    return {"plans": [plans_module.to_dict(p) for p in rows]}
+
+
+@app.post("/admin/plans", tags=["admin"])
+async def admin_create_plan(body: dict, _=Depends(current_superuser)):
+    """Create a new plan row. `slug` must be unique; price is in paise."""
+    from .auth import async_session_maker
+    required = {"slug", "display_name", "description", "credits_granted",
+                "price_inr_paise", "cadence"}
+    missing = required - set(body.keys())
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing fields: {sorted(missing)}.")
+    if body["cadence"] not in (
+        plans_module.CADENCE_ONE_TIME,
+        plans_module.CADENCE_MONTHLY,
+        plans_module.CADENCE_ANNUAL,
+    ):
+        raise HTTPException(status_code=400, detail=f"Invalid cadence '{body['cadence']}'.")
+    async with async_session_maker() as session:
+        plan = plans_module.Plan(
+            slug=body["slug"],
+            display_name=body["display_name"],
+            description=body["description"],
+            credits_granted=int(body["credits_granted"]),
+            price_inr_paise=int(body["price_inr_paise"]),
+            cadence=body["cadence"],
+            rollover_cap=body.get("rollover_cap"),
+            active=bool(body.get("active", True)),
+            sort_order=int(body.get("sort_order", 0)),
+        )
+        session.add(plan)
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise HTTPException(status_code=400, detail=f"Could not create plan: {e}")
+        await session.refresh(plan)
+        return plans_module.to_dict(plan)
+
+
+@app.patch("/admin/plans/{plan_id}", tags=["admin"])
+async def admin_update_plan(plan_id: str, body: dict, _=Depends(current_superuser)):
+    """Partial update. Editable fields: display_name, description,
+    credits_granted, price_inr_paise, rollover_cap, active, sort_order.
+    `slug` and `cadence` are intentionally immutable post-creation —
+    changing them mid-flight would orphan any active Razorpay subscriptions
+    or break refund flows that reference them.
+    """
+    from sqlalchemy import select
+    from .auth import async_session_maker
+    editable = {
+        "display_name", "description", "credits_granted",
+        "price_inr_paise", "rollover_cap", "active", "sort_order",
+    }
+    try:
+        pid = uuid.UUID(plan_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid plan id.")
+    async with async_session_maker() as session:
+        plan = (await session.execute(
+            select(plans_module.Plan).where(plans_module.Plan.id == pid)
+        )).scalar_one_or_none()
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found.")
+        for k, v in body.items():
+            if k not in editable:
+                continue
+            if k in ("credits_granted", "price_inr_paise", "sort_order"):
+                setattr(plan, k, int(v))
+            elif k == "rollover_cap":
+                setattr(plan, k, int(v) if v is not None else None)
+            elif k == "active":
+                setattr(plan, k, bool(v))
+            else:
+                setattr(plan, k, v)
+        await session.commit()
+        await session.refresh(plan)
+        return plans_module.to_dict(plan)
+
+
+@app.delete("/admin/plans/{plan_id}", tags=["admin"])
+async def admin_delete_plan(plan_id: str, _=Depends(current_superuser)):
+    """Hard-delete a plan. Use carefully — soft-delete via active=false is
+    almost always the right move; this endpoint exists for seed / test
+    cleanup. Refuses to delete plans with a Razorpay plan id attached.
+    """
+    from sqlalchemy import select, delete
+    from .auth import async_session_maker
+    try:
+        pid = uuid.UUID(plan_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid plan id.")
+    async with async_session_maker() as session:
+        plan = (await session.execute(
+            select(plans_module.Plan).where(plans_module.Plan.id == pid)
+        )).scalar_one_or_none()
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found.")
+        if plan.razorpay_plan_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Plan has a Razorpay plan id; deactivate it via PATCH instead.",
+            )
+        await session.execute(
+            delete(plans_module.Plan).where(plans_module.Plan.id == pid)
+        )
+        await session.commit()
+        return {"ok": True}
 
 
 @app.get("/health")
