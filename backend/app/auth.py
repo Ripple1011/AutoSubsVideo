@@ -107,6 +107,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def on_after_register(self, user: User, request: Optional[Request] = None) -> None:
         print(f"[auth] user registered: {user.email} ({user.id})", flush=True)
+        # Grant the signup bonus + superuser dev allotment (when applicable).
+        # Lazy import so credits.py can import from auth.py without a cycle.
+        from .credits import (
+            SOURCE_SIGNUP, SOURCE_SUPERUSER_DEV,
+            SIGNUP_BONUS_CREDITS, SUPERUSER_DEV_CREDITS,
+            grant_credits,
+        )
+        await grant_credits(user.id, SOURCE_SIGNUP, SIGNUP_BONUS_CREDITS)
+        if user.is_superuser:
+            await grant_credits(user.id, SOURCE_SUPERUSER_DEV, SUPERUSER_DEV_CREDITS)
+            print(
+                f"[auth] superuser dev grant: {SUPERUSER_DEV_CREDITS} credits → {user.email}",
+                flush=True,
+            )
 
     async def on_after_login(
         self,

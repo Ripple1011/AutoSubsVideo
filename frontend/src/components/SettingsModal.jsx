@@ -13,6 +13,10 @@ export default function SettingsModal({ open, onClose }) {
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [status, setStatus] = useState(null)
+  // Power-user toggle. Default: collapsed/hidden because managed-Gemini is
+  // the supported path. Users with their own key flip this on, paste it,
+  // and bypass the credit system entirely (their key, their bill).
+  const [byokOpen, setByokOpen] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -20,6 +24,9 @@ export default function SettingsModal({ open, onClose }) {
     setProvider(stored.provider || '')
     setModel(stored.model || '')
     setApiKey(stored.apiKey || '')
+    // If the user already has a saved BYOK key, open the section so they
+    // see what's configured.
+    setByokOpen(Boolean(stored.apiKey))
     setStatus(null)
 
     api('/health').then((h) => {
@@ -70,82 +77,93 @@ export default function SettingsModal({ open, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">ASR Settings</h2>
+          <h2 className="text-lg font-semibold">Transcription</h2>
           <button className="text-white/50 hover:text-white" onClick={onClose}>✕</button>
         </div>
 
-        <p className="text-xs text-white/50">
-          Your key stays in this browser only. Leave blank to use the server default
-          {serverDefaults && (
-            <> (server: <span className="font-mono">{serverDefaults.provider}/{serverDefaults.model}</span>,
-            {' '}groq {serverDefaults.hasGroq ? '✓' : '✗'},
-            openai {serverDefaults.hasOpenai ? '✓' : '✗'},
-            sarvam {serverDefaults.hasSarvam ? '✓' : '✗'},
-            gemini {serverDefaults.hasGemini ? '✓' : '✗'})</>
-          )}.
-        </p>
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3 space-y-1">
+          <div className="text-sm text-white/85">
+            Managed by AutoSub — <span className="font-mono">Gemini 2.5 Pro</span>
+          </div>
+          <div className="text-xs text-white/50">
+            Each transcription uses one credit from your balance. Best
+            accuracy across English, Hindi, Gujarati.
+          </div>
+        </div>
 
-        <label className="block text-sm">
-          <span className="text-white/70 block mb-1">Provider</span>
-          <select
-            value={provider}
-            onChange={(e) => { setProvider(e.target.value); setModel('') }}
-            className="w-full bg-[#1a1a22] text-white rounded px-3 py-2 border border-white/10"
-          >
-            <option value="">(use server default)</option>
-            {Object.keys(providerModels).map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </label>
+        <button
+          onClick={() => setByokOpen((v) => !v)}
+          className="text-xs text-white/40 hover:text-white/70 underline underline-offset-2"
+        >
+          {byokOpen ? '▾ Hide advanced (bring your own API key)' : '▸ Advanced: bring your own API key'}
+        </button>
 
-        <label className="block text-sm">
-          <span className="text-white/70 block mb-1">Model</span>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            disabled={!provider}
-            className="w-full bg-[#1a1a22] text-white rounded px-3 py-2 border border-white/10 disabled:opacity-40"
-          >
-            <option value="">(provider default)</option>
-            {models.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <span className="text-xs text-white/40 block mt-1">
-            For Hindi/Gujarati with reliable timestamps,
-            <span className="font-mono"> gemini → gemini-2.5-flash</span> is best.
-            Sarvam's <span className="font-mono">saarika:v2.5</span> has the best raw text accuracy
-            but lacks word timings.
-          </span>
-        </label>
+        {byokOpen && (
+          <div className="space-y-3 pt-1 border-t border-white/10">
+            <p className="text-xs text-white/50">
+              Power users only. With a personal key your transcriptions hit
+              the provider directly and don't consume your credits — but
+              you also lose Pro accuracy guarantees because you can pick a
+              cheaper model. Key stays in this browser only.
+            </p>
 
-        <label className="block text-sm">
-          <span className="text-white/70 block mb-1">API Key</span>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-... or gsk_..."
-            className="w-full bg-[#1a1a22] text-white rounded px-3 py-2 border border-white/10 font-mono text-xs"
-          />
-        </label>
+            <label className="block text-sm">
+              <span className="text-white/70 block mb-1">Provider</span>
+              <select
+                value={provider}
+                onChange={(e) => { setProvider(e.target.value); setModel('') }}
+                className="w-full bg-[#1a1a22] text-white rounded px-3 py-2 border border-white/10"
+              >
+                <option value="">(use server default)</option>
+                {Object.keys(providerModels).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm">
+              <span className="text-white/70 block mb-1">Model</span>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={!provider}
+                className="w-full bg-[#1a1a22] text-white rounded px-3 py-2 border border-white/10 disabled:opacity-40"
+              >
+                <option value="">(provider default)</option>
+                {models.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+
+            <label className="block text-sm">
+              <span className="text-white/70 block mb-1">API Key</span>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-... or gsk_..."
+                className="w-full bg-[#1a1a22] text-white rounded px-3 py-2 border border-white/10 font-mono text-xs"
+              />
+            </label>
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleTest} className="flex-1 px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm">
+                Test Connection
+              </button>
+              <button onClick={handleClear} className="px-4 py-2 rounded bg-white/5 hover:bg-white/10 text-sm">
+                Clear
+              </button>
+              <button onClick={handleSave} className="flex-1 px-4 py-2 rounded bg-purple-500 hover:bg-purple-400 text-sm font-semibold">
+                Save
+              </button>
+            </div>
+          </div>
+        )}
 
         {status && (
           <div className={`text-xs rounded px-3 py-2 ${status.ok ? 'bg-emerald-500/20 text-emerald-200' : 'bg-rose-500/20 text-rose-200'}`}>
             {status.msg}
           </div>
         )}
-
-        <div className="flex gap-2 pt-2">
-          <button onClick={handleTest} className="flex-1 px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm">
-            Test Connection
-          </button>
-          <button onClick={handleClear} className="px-4 py-2 rounded bg-white/5 hover:bg-white/10 text-sm">
-            Clear
-          </button>
-          <button onClick={handleSave} className="flex-1 px-4 py-2 rounded bg-purple-500 hover:bg-purple-400 text-sm font-semibold">
-            Save
-          </button>
-        </div>
       </div>
     </div>
   )

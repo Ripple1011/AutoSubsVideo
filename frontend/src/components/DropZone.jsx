@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { uploadFile, api } from '../lib/apiClient'
+import { useCredits } from '../hooks/useCredits'
 
 const LANGUAGES = [
   { value: 'auto', label: 'Auto-Detect' },
@@ -21,6 +22,7 @@ export default function DropZone({ onReady }) {
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState(null)
+  const { balance, refresh: refreshCredits } = useCredits()
 
   const pick = (f) => {
     if (!f) return
@@ -36,9 +38,15 @@ export default function DropZone({ onReady }) {
 
   const handleGenerate = async () => {
     if (!file) { setStatus({ ok: false, msg: 'Drop a file first.' }); return }
+    if (balance === 0) {
+      setStatus({ ok: false, msg: 'No credits remaining. Top up to keep transcribing.' })
+      return
+    }
     setBusy(true); setStatus({ ok: true, msg: 'Uploading…' })
     try {
       const { job_id } = await uploadFile(file, language, prompt, startOffset)
+      // Backend consumed a credit (managed flow). Refresh the badge.
+      refreshCredits()
       setStatus({ ok: true, msg: `Job ${job_id} — transcribing…` })
 
       const job = await pollJob(job_id)
@@ -46,6 +54,8 @@ export default function DropZone({ onReady }) {
       onReady({ videoUrl: objectUrl, segments: job.segments, jobId: job_id })
     } catch (e) {
       setStatus({ ok: false, msg: e.message })
+      // Refresh in case the credit was refunded server-side after a 4xx/5xx.
+      refreshCredits()
     } finally {
       setBusy(false)
     }

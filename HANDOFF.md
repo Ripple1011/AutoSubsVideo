@@ -5,6 +5,132 @@ Both AI agents update this file at end of session. Read before starting.
 
 ---
 
+## 2026-05-28 (night) · Windows agent — Slice 3a: Credits + 60s cap + managed Gemini
+
+**Landed:**
+- Credits system: `credit_grants` table in `users.db`. Each row is one
+  issuance (signup bonus, pack purchase, monthly refill, refund).
+  FIFO-consumed across grants — the oldest non-expired grant with
+  `credits_remaining > 0` loses one credit per transcription. Atomic
+  `UPDATE ... WHERE credits_remaining > 0` so concurrent uploads from
+  the same user can't double-spend.
+- New module `backend/app/credits.py` exposes:
+  `grant_credits / consume_credit / refund_credit / get_balance / get_history`.
+- Signup bonus: 3 free credits granted via `on_after_register` in auth.py.
+  Superuser flag adds an extra 1000 dev-allotment grant. Both retroactive
+  for the existing 2 users — script-promoted both to superuser and
+  granted 1003 credits each.
+- `/upload` behavior is now bimodal:
+  - **Managed** (no `X-User-ASR-Key` header): provider/model are FORCED
+    to `gemini` + `gemini-2.5-pro` server-side (frontend can't downgrade
+    by poking the dropdown). Credit consumed pre-pipeline; refunded on
+    any HTTPException or unhandled exception.
+  - **BYOK** (key header present): their key, their model choice, no
+    credit consumed. Backward-compatible.
+- 60-second video cap enforced server-side via ffprobe AFTER write to
+  disk (we need the file to probe). On over-cap: refund credit, purge
+  upload directory, 413 Payload Too Large with a creator-friendly
+  "trim the clip" message. `MAX_SECONDS = 60.0`.
+- New endpoint `GET /users/me/credits` → `{balance, history: [...]}`.
+- New job JSON fields: `billing_mode` ("byok" | "managed") and
+  `consumed_grant_id` (UUID of the grant row that funded this job). Set
+  on upload; used for refund and future per-user usage analytics.
+
+**Frontend:**
+- `useCredits()` hook: `{balance, history, loading, refresh}`. Fetches
+  `/users/me/credits` on mount. Cross-component sync via a
+  `'autosub:credits-refresh'` window event — every consumer refetches
+  when any consumer calls refresh(). Avoids context-provider boilerplate
+  for now.
+- `CreditsBadge` component — purple pill "🪙 N" in the top bar. Turns
+  rose-colored when balance ≤ 3 (low warning).
+- DropZone:
+  - Pre-flight check: balance === 0 → reject upload before sending.
+  - On generate: refresh() after both success and failure paths (the
+    failure path catches refunds the server issued).
+- SettingsModal restructured:
+  - Default view: a single "Managed by AutoSub — Gemini 2.5 Pro" panel
+    with a one-line explanation of credits.
+  - BYOK provider/model/key inputs moved behind a collapsed "▸ Advanced:
+    bring your own API key" section. Auto-expanded when a key is already
+    saved (so existing BYOK users see their config).
+
+**Pricing & tier shape (locked in, not yet implemented):**
+
+| Tier | Credits | Price | Notes |
+|---|---|---|---|
+| Free (signup) | 3 | ₹0 | One-time on registration |
+| Pack-10 | 10 | ₹49 | One-time, never expires |
+| Pack-50 | 50 | ₹199 | One-time, never expires |
+| Pro Monthly | 150/mo | ₹399 | Rollover up to 300 |
+| Pro Annual | 1500/yr | ₹2,999 | |
+
+Unit economics at gemini-2.5-pro: ~₹0.38 cost per video, 80-92% margin
+across all tiers. Hard 60s cap blocks the "upload 4-hour file" attack;
+credits naturally rate-limit; free tier capped at ₹1.14 worst-case per
+new account. Source models doc / pricing detail kept in commit msg.
+
+**Decisions baked in:**
+- 1 credit = 1 video (regardless of length under 60s). Simple to explain.
+- Free + paid tiers all use `gemini-2.5-pro` (best Indic accuracy).
+- Refund credit on any pipeline failure (HTTPException OR Exception).
+- Server-side override of provider/model for managed users — frontend
+  is decorative for the model picker when no BYOK key is present.
+- BYOK kept as a power-user opt-in. Their usage is free to us.
+- People API was already enabled in Google Cloud Console (auth slice
+  prereq); nothing changed there.
+
+**Known issues / things to know:**
+- Frontend has TWO different patterns now for cross-component state:
+  `useAuth` is per-instance (each component independently fetches
+  /users/me), `useCredits` is per-instance + window-event-broadcast.
+  Both work. If we add a third (e.g., user settings), consider
+  centralizing on Zustand. Not worth the refactor today.
+- The 60s cap is enforced AFTER the upload writes to disk. A user with a
+  large file would still incur disk write + ffprobe cost before
+  rejection. Acceptable for now (videos are tens of MB, not GB); revisit
+  if we ever raise the cap or accept longer files.
+- `_PUBLIC_GET_PATHS` in main.py is `("/health", "/users/me")` — exact
+  match. `/users/me/credits` is NOT in the list, but the shared-password
+  middleware only blocks when `SHARED_PASSWORD` is set. On localhost it
+  doesn't matter; on VPS it does. If/when the VPS hits this code, either
+  add `/users/me/credits` to public paths OR retire the shared-password
+  gate entirely.
+
+**Files added:**
+- `backend/app/credits.py`
+- `frontend/src/hooks/useCredits.js`
+- `frontend/src/components/CreditsBadge.jsx`
+
+**Files modified:**
+- `backend/app/auth.py` (signup bonus in on_after_register)
+- `backend/app/main.py` (force pro, credit consume/refund, 60s cap,
+  /users/me/credits)
+- `frontend/src/App.jsx` (renders CreditsBadge)
+- `frontend/src/components/DropZone.jsx` (balance check + refresh)
+- `frontend/src/components/SettingsModal.jsx` (managed-first UX)
+
+**Queued for Slice 3b — Stripe billing (next session):**
+- Stripe products (4 SKUs: pack_10, pack_50, monthly, annual).
+- `/pricing` route with 4 tier cards and Stripe Checkout buttons.
+- `/account` route — credit balance + grant history + active subscription.
+- Webhook handler `/stripe/webhook` writes new `credit_grants` rows on
+  payment success. Idempotency via stripe_ref unique check.
+- Empty state when balance === 0 should link to /pricing instead of a
+  dead-end error toast.
+- Monthly tier needs a scheduler (cron or Celery beat) to refill credits
+  on subscription anniversaries. Stripe webhooks for `invoice.paid` can
+  drive this.
+- Refunds / cancellation flow (Stripe's portal handles most of it).
+- Email receipts (Stripe does it; we just need to verify it's enabled).
+
+**Deployed to VPS:** NO. Same blocker as Slice 2 (Google OAuth doesn't
+accept raw IPs as redirect URIs since 2024). Mac agent SHOULD NOT
+deploy this slice to VPS until a real domain + HTTPS + updated Google
+Console redirect URIs are configured.
+
+---
+
 ## 2026-05-28 (evening) · Windows agent — Slice 2: Auth (Google OAuth)
 
 **Landed:**

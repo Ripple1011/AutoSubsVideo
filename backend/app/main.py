@@ -20,6 +20,12 @@ from .auth import (
     google_oauth_client,
     _jwt_secret,
 )
+from .credits import (
+    consume_credit,
+    get_balance,
+    get_history,
+    refund_credit,
+)
 from .config import get_settings
 from .fonts import ensure_fonts_present
 from .schemas import UserRead, UserCreate, UserUpdate
@@ -190,6 +196,20 @@ async def claim_my_orphans(user=Depends(current_active_user)):
     return {"claimed": n}
 
 
+@app.get("/users/me/credits", tags=["credits"])
+async def my_credits(user=Depends(current_active_user)):
+    """Current credit balance + grant history for the dashboard / top bar.
+
+    Single round-trip so the UI can render the balance badge AND a
+    drill-down panel without a second request.
+    """
+    from .auth import async_session_maker
+    async with async_session_maker() as session:
+        balance = await get_balance(user.id, session)
+        history = await get_history(user.id, session)
+    return {"balance": balance, "history": history}
+
+
 @app.get("/health")
 async def health():
     """Liveness probe + ASR config summary (no secrets returned)."""
@@ -242,9 +262,21 @@ async def upload(
 ):
     """Accept .mp4/.mov, persist to disk, register job, enqueue pipeline.
 
-    BYOK headers (when present) override server .env defaults downstream.
+    Behavior depends on whether the caller is BYOK (`X-User-ASR-Key` header
+    present) or managed (uses the server's Gemini key):
+      - Managed: provider/model are forced to `gemini` + `gemini-2.5-pro`,
+        a credit is consumed up front, refunded on pipeline failure.
+      - BYOK: their key, their model choice, no credit consumed.
+
     Returns: { job_id }.
     """
+    is_byok = bool(x_user_asr_key)
+    if not is_byok:
+        # Managed users can't downgrade onto a cheaper-but-worse model by
+        # poking the dropdown; force pro server-side.
+        x_user_asr_provider = "gemini"
+        x_user_asr_model = "gemini-2.5-pro"
+
     # Validate credentials up front so the user fails fast — don't write the
     # file to disk if their key/provider combo is invalid.
     resolve_credentials(x_user_asr_key, x_user_asr_provider, x_user_asr_model)
@@ -256,10 +288,46 @@ async def upload(
             detail=f"Unsupported file type '{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}.",
         )
 
+    # Credit check (managed only). Consume BEFORE writing the file to disk
+    # so failed-quota uploads don't leave clutter on the filesystem.
+    consumed_grant_id = None
+    if not is_byok:
+        ok, consumed_grant_id = await consume_credit(user.id)
+        if not ok:
+            raise HTTPException(
+                status_code=402,
+                detail="Out of credits. Top up to keep transcribing.",
+            )
+
     job_id = new_job_id()
     target = upload_dir(job_id) / f"source{ext}"
     with target.open("wb") as out:
         shutil.copyfileobj(file.file, out)
+
+    # 60-second hard cap on the source video, enforced server-side. We probe
+    # the file as written rather than trusting any client-side claim. Files
+    # over the cap get rejected, the credit gets refunded, and the upload
+    # directory is purged so disk doesn't fill with oversized attempts.
+    try:
+        from .video_worker import probe_duration
+        duration = probe_duration(str(target))
+    except Exception:
+        duration = 0.0  # ffprobe failed; let the pipeline surface real error
+    MAX_SECONDS = 60.0
+    if duration > MAX_SECONDS:
+        if consumed_grant_id is not None:
+            await refund_credit(consumed_grant_id)
+        try:
+            shutil.rmtree(upload_dir(job_id))
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Video is {duration:.1f}s; the limit for shorts is {int(MAX_SECONDS)}s. "
+                "Trim the clip and try again."
+            ),
+        )
 
     state = {
         "id": job_id,
@@ -272,6 +340,9 @@ async def upload(
         "created_at": now_iso(),
         "segments": [],
         "error": None,
+        # Provenance for billing / refund-on-failure path.
+        "billing_mode": "byok" if is_byok else "managed",
+        "consumed_grant_id": str(consumed_grant_id) if consumed_grant_id else None,
     }
     write_job(state)
 
@@ -293,8 +364,12 @@ async def upload(
             x_user_asr_key, x_user_asr_provider, x_user_asr_model,
         )
     except HTTPException:
+        if consumed_grant_id is not None:
+            await refund_credit(consumed_grant_id)
         raise
     except Exception as e:
+        if consumed_grant_id is not None:
+            await refund_credit(consumed_grant_id)
         raise HTTPException(status_code=500, detail=f"Pipeline failed: {e}")
 
     return {"job_id": job_id}

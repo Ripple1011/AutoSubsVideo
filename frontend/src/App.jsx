@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import SettingsModal from './components/SettingsModal'
 import RecentVideosMenu from './components/RecentVideosMenu'
 import ExportMenu from './components/ExportMenu'
+import CreditsBadge from './components/CreditsBadge'
 import { loadSavedStyle } from './lib/defaultStyle'
 import { useAuth } from './hooks/useAuth'
 
@@ -61,6 +62,7 @@ export default function App() {
             onPick={handlePickRecent}
             onDelete={handleDeleteRecent}
           />
+          {user && <CreditsBadge />}
           <button className="text-white/60 hover:text-white" onClick={() => setSettingsOpen(true)}>
             ⚙ Settings
           </button>
