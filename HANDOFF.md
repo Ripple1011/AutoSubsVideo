@@ -5,7 +5,137 @@ Both AI agents update this file at end of session. Read before starting.
 
 ---
 
-## 2026-05-28 · Windows agent
+## 2026-05-28 (evening) · Windows agent — Slice 2: Auth (Google OAuth)
+
+**Landed:**
+- `fastapi-users` + Google OAuth + cookie/JWT session backend.
+  - SQLite at `backend/data/users.db` (users + oauth_accounts tables).
+  - JWT signing secret auto-generated on first boot, written to `.env` as
+    `JWT_SECRET`, persists across restarts.
+  - Cookie: `autosub_session`, HttpOnly + SameSite=Lax, 30-day lifetime,
+    `Secure=False` until HTTPS lands.
+- Auth routers mounted in `main.py`:
+  - `GET /auth/google/authorize` — returns `{authorization_url}` for the
+    frontend to redirect to.
+  - `GET /auth/google/callback` — handled by fastapi-users; a small middleware
+    promotes the library's success 204 into a 302 to the configured frontend
+    URL, otherwise the browser is stranded on a blank page after the Google
+    round-trip.
+  - `POST /auth/logout` — clears the cookie.
+  - `GET /users/me` — current user profile.
+  - `POST /users/claim-orphans` — one-shot for the first registered user to
+    inherit pre-auth jobs (no `user_id` in their state JSON). Server returns
+    `{claimed: 0}` for every subsequent user; safe to call repeatedly.
+- Per-user data isolation:
+  - `storage.read_job(id, user_id=...)` returns None when the job is owned
+    by someone else (same behavior as "doesn't exist").
+  - `storage.list_jobs(limit, user_id=...)` filters by user_id; oversamples
+    by 3x before filtering so a user with many interleaved-by-time jobs
+    still gets a full page.
+  - Every job endpoint in `main.py` now has `Depends(current_active_user)`:
+    `/upload`, `/jobs` (list), `/jobs/{id}` (read), `/jobs/{id}` (patch),
+    `/jobs/{id}` (delete), `/export/hard`.
+  - `/jobs/{id}/video` and `/jobs/{id}/thumb` stay public (the 12-char
+    random ID is the soft secret; `<video>`/`<img>` can't send headers).
+- Frontend:
+  - `useAuth()` hook — `{user, loading, logout, refresh}`. Probes
+    `/users/me` on mount; on success kicks off a best-effort
+    claim-orphans POST (silent failure).
+  - `RequireAuth` route wrapper — redirects to `/login` while preserving
+    the originally-requested path in `location.state.from`.
+  - `Login` route — single "Continue with Google" button; full-page
+    redirect to `authorization_url`. Bounces logged-in users to the
+    `next` destination immediately.
+  - `App.jsx` shell now shows a purple avatar circle (first letter of
+    email) in the top-right with a dropdown for email + logout.
+  - `apiClient.api()` and `uploadFile()` now send `credentials: 'include'`
+    so the session cookie travels with every request.
+  - 401 handler: if detail mentions "password" it still prompts for the
+    shared-password (legacy gate). Otherwise it redirects to `/login`,
+    preserving the current path via `?next=...`.
+
+**Google Cloud Console setup (you did this manually, for the record):**
+- OAuth consent screen: External, Testing mode, user email added as test
+  user.
+- Scopes: `openid`, `userinfo.email`, `userinfo.profile`.
+- People API: enabled (httpx_oauth calls
+  `https://people.googleapis.com/v1/people/me`; this API must be enabled
+  on the project, otherwise the callback 500s with `GetIdEmailError`).
+- Authorized JS origins: `http://localhost:5173`, `http://localhost:8000`.
+- Authorized redirect URI: `http://localhost:8000/auth/google/callback`.
+- VPS deferred until a real domain (Google won't accept raw IPs as redirect
+  URIs since 2024; nip.io workaround documented but not wired).
+
+**Decisions baked in:**
+- OAuth-only, no email/password. `hashed_password` column exists on the
+  User model (from the fastapi-users mixin) but is never written.
+- First-registered-user inherits orphan jobs. After that, orphans stay
+  invisible. Idempotent via the `claim_orphans_if_first_user()` count
+  check.
+- SQLite, not Postgres. Single file, zero ops.
+- People API for profile retrieval (httpx_oauth default). Could be
+  swapped to `oauth2/v2/userinfo` later if Google deprecates it.
+- Shared-password gate STILL ACTIVE on the VPS. Two layers during
+  transition. Retire once auth is solid on the deployed app.
+
+**Known issues:**
+- `useAuth()` is per-component state — `App.jsx`, `RequireAuth`, and
+  `Login` each independently fetch `/users/me` on mount. Functionally
+  correct (each gets the same answer from the cookie) but visible in the
+  log as duplicate requests. Refactor to a shared context if it becomes
+  a perf concern.
+- The claim-orphans fetch fires from `useAuth.refresh()` — runs on every
+  mount of any component using the hook. The server-side dedup is
+  idempotent so this is harmless, just noisy. Could be moved to a
+  one-shot on first successful login if the duplicate POSTs become
+  annoying in the log.
+
+**Files added:**
+- `backend/app/auth.py` — fastapi-users wiring + Google client + DB engine
+- `backend/app/schemas.py` — UserRead/UserCreate/UserUpdate
+- `backend/data/users.db` (created on first boot)
+- `frontend/src/hooks/useAuth.js`
+- `frontend/src/routes/Login.jsx`
+- `frontend/src/components/RequireAuth.jsx`
+
+**Files modified:**
+- `backend/app/main.py` — auth routers, OAuth callback middleware,
+  `Depends(current_active_user)` everywhere, public-paths exception for
+  `/auth/*` and `/users/me`.
+- `backend/app/config.py` — `GOOGLE_OAUTH_*`, `JWT_SECRET`,
+  `OAUTH_CALLBACK_BASE`, `OAUTH_SUCCESS_REDIRECT`,
+  `JWT_LIFETIME_SECONDS`.
+- `backend/app/storage.py` — `user_id` field, per-user filtering,
+  `claim_orphan_jobs`.
+- `backend/.env` — JWT_SECRET written automatically.
+- `backend/requirements.txt` — fastapi-users[sqlalchemy,oauth],
+  aiosqlite, httpx-oauth, itsdangerous.
+- `frontend/src/App.jsx` — user dropdown.
+- `frontend/src/lib/apiClient.js` — credentials include, 401 → /login.
+- `frontend/src/main.jsx` — `/login` route + RequireAuth wrapper.
+
+**Queued for Slice 3:**
+- Retire shared-password gate (env-flag toggle so it can be turned off
+  per-deployment).
+- Per-user BYOK API keys stored in DB (move out of browser localStorage
+  so a session move to another browser doesn't lose configuration).
+- Account settings page (`/account`): change email, revoke active
+  sessions, delete account.
+- Public landing page (`/`) for logged-out users — currently we redirect
+  straight to `/login`.
+- Stripe billing + Gemini-cost tracking (Phase C).
+- VPS deploy: requires a domain (Google won't accept the raw IP) OR
+  switch to nip.io. Document a clear "go to production" checklist that
+  includes both OAuth domain setup and HTTPS via certbot.
+
+**Deployed to VPS:** NO. Localhost-only OAuth so far. Mac agent should NOT
+deploy this slice to VPS without first adding the VPS domain/origin to
+Google Cloud Console — otherwise login from the VPS will 401 at the
+"OAuth client not found" step.
+
+---
+
+## 2026-05-28 · Windows agent — Slice 1: Routes + Projects
 
 **Landed (one commit, pushed to `main`):**
 - React Router (`react-router-dom`) added. Three routes:

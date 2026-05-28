@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Outlet, Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import SettingsModal from './components/SettingsModal'
 import RecentVideosMenu from './components/RecentVideosMenu'
 import ExportMenu from './components/ExportMenu'
 import { loadSavedStyle } from './lib/defaultStyle'
+import { useAuth } from './hooks/useAuth'
 
 /**
  * App shell. Persistent top bar + <Outlet/> for the active route. The
@@ -12,8 +13,15 @@ import { loadSavedStyle } from './lib/defaultStyle'
  */
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   // Detect workspace route by URL pattern. We don't pull `useParams` here
   // because App is mounted ABOVE the route definitions — useParams would
@@ -56,6 +64,32 @@ export default function App() {
           <button className="text-white/60 hover:text-white" onClick={() => setSettingsOpen(true)}>
             ⚙ Settings
           </button>
+          {user && (
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5"
+                title={user.email}
+              >
+                <span className="w-7 h-7 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-semibold">
+                  {(user.email || '?').charAt(0).toUpperCase()}
+                </span>
+              </button>
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-1 w-56 rounded border border-white/10 bg-[#16161d] shadow-lg z-30">
+                  <div className="px-3 py-2 text-xs text-white/60 border-b border-white/10 truncate">
+                    {user.email}
+                  </div>
+                  <button
+                    onClick={() => { setUserMenuOpen(false); handleLogout() }}
+                    className="block w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5"
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />

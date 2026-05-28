@@ -51,31 +51,49 @@ function authHeaders() {
   return h
 }
 
-// Reusable 401 handler — drops the stored password, prompts for a new one,
-// stores it, and returns true if the caller should retry the request.
-// Returns false if the user cancelled the prompt.
-function handleUnauthorized() {
-  clearSharedPassword()
-  const next = window.prompt(
-    'AutoSub password required (or current one is wrong).\n\n' +
-    'Ask the operator for the SHARED_PASSWORD configured on the server.'
-  )
-  if (!next) return false
-  setSharedPassword(next)
-  return true
+// 401 handler. With OAuth + cookie sessions (Slice 2) the right behavior is
+// to redirect to /login — the session has expired or doesn't exist. The
+// shared-password legacy prompt is kept as a fallback for endpoints that
+// still respond with 401 + a SHARED_PASSWORD detail (i.e. when the gate
+// header is mismatched, not when the session is missing).
+function handleUnauthorized(detail) {
+  // Only treat as "needs login" when the server hints at session/auth.
+  // Heuristic: shared-password failures mention 'password' in the detail.
+  const isPwdGate = typeof detail === 'string' && detail.toLowerCase().includes('password')
+  if (isPwdGate) {
+    clearSharedPassword()
+    const next = window.prompt(
+      'AutoSub password required (or current one is wrong).\n\n' +
+      'Ask the operator for the SHARED_PASSWORD configured on the server.'
+    )
+    if (!next) return false
+    setSharedPassword(next)
+    return true
+  }
+  // Real session loss → bounce to /login. Preserve the current path so the
+  // login page can send the user back here after auth.
+  const here = window.location.pathname + window.location.search
+  if (window.location.pathname !== '/login') {
+    window.location.href = `/login?next=${encodeURIComponent(here)}`
+  }
+  return false
 }
 
 export async function api(path, { method = 'GET', body, headers = {} } = {}) {
   const opts = {
     method,
+    credentials: 'include',   // send session cookie
     headers: { 'Content-Type': 'application/json', ...authHeaders(), ...headers },
     body: body ? JSON.stringify(body) : undefined,
   }
   let res = await fetch(`/api${path}`, opts)
-  if (res.status === 401 && handleUnauthorized()) {
-    // Retry once with the new password.
-    opts.headers = { 'Content-Type': 'application/json', ...authHeaders(), ...headers }
-    res = await fetch(`/api${path}`, opts)
+  if (res.status === 401) {
+    const data = await res.clone().json().catch(() => ({}))
+    if (handleUnauthorized(data.detail)) {
+      // Retry once after re-prompting for the shared password.
+      opts.headers = { 'Content-Type': 'application/json', ...authHeaders(), ...headers }
+      res = await fetch(`/api${path}`, opts)
+    }
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
@@ -91,12 +109,16 @@ export async function uploadFile(file, language, prompt = '', startOffset = 0) {
   // Don't set Content-Type — the browser sets multipart boundary itself.
   const send = () => fetch('/api/upload', {
     method: 'POST',
+    credentials: 'include',
     headers: authHeaders(),
     body: form,
   })
   let res = await send()
-  if (res.status === 401 && handleUnauthorized()) {
-    res = await send()
+  if (res.status === 401) {
+    const data = await res.clone().json().catch(() => ({}))
+    if (handleUnauthorized(data.detail)) {
+      res = await send()
+    }
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)

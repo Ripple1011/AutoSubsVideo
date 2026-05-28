@@ -52,35 +52,52 @@ def write_job(state: dict) -> None:
     job_path(state["id"]).write_text(json.dumps(state, indent=2))
 
 
-def read_job(job_id: str) -> dict | None:
+def read_job(job_id: str, user_id: str | None = None) -> dict | None:
+    """Read a job's state file. When `user_id` is provided, returns None for
+    jobs owned by a different user — same as if the job didn't exist. This
+    is the per-user isolation seam: API handlers always pass user_id, the
+    pipeline / cleanup code passes None (privileged read).
+    """
     p = job_path(job_id)
     if not p.exists():
         return None
-    return json.loads(p.read_text())
+    state = json.loads(p.read_text())
+    if user_id is not None and state.get("user_id") not in (user_id, None):
+        # Owned by someone else. Pretend it doesn't exist.
+        return None
+    return state
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def list_jobs(limit: int = 20) -> list[dict]:
-    """Return a compact summary of the most-recent `limit` jobs, sorted
-    newest-first by file mtime. Each item is small enough to render in a
-    dropdown menu — no segments, no transcripts, just enough to identify
-    the job. Malformed JSON files are skipped silently.
+def list_jobs(limit: int = 20, user_id: str | None = None) -> list[dict]:
+    """Return a compact summary of the most-recent `limit` jobs owned by
+    `user_id` (or all jobs if user_id is None — used by background tasks).
+
+    Sorted newest-first by file mtime. Each item is small enough to render
+    in a dropdown menu — no segments, no transcripts, just enough to
+    identify the job. Malformed JSON files are skipped silently.
     """
     if not JOBS.exists():
         return []
+    # We oversample by 3× before filtering by user_id so users with many
+    # jobs interleaved with other users' jobs still get a full page.
+    # Acceptable for current scale; revisit if we cross 1k jobs/user.
+    scan_limit = max(1, limit) * 3 if user_id is not None else max(1, limit)
     paths = sorted(
         JOBS.glob("*.json"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
-    )[:max(1, limit)]
+    )[:scan_limit]
     out: list[dict] = []
     for p in paths:
         try:
             state = json.loads(p.read_text())
         except Exception:
+            continue
+        if user_id is not None and state.get("user_id") not in (user_id, None):
             continue
         out.append({
             "id": state.get("id"),
@@ -90,6 +107,8 @@ def list_jobs(limit: int = 20) -> list[dict]:
             "language": state.get("language"),
             "num_segments": len(state.get("segments") or []),
         })
+        if len(out) >= limit:
+            break
     return out
 
 
@@ -119,6 +138,31 @@ def cleanup_old_jobs(retention_days: int) -> int:
             # File raced with another delete or got corrupted — skip and move on.
             continue
     return removed
+
+
+def claim_orphan_jobs(user_id: str) -> int:
+    """Assign every job that has no `user_id` to the given user. Used as a
+    one-shot when the first real user signs up — jobs created before auth
+    existed have no owner; this hands them over so the user's history
+    doesn't start empty.
+
+    Returns the number of jobs claimed. Idempotent on subsequent runs
+    (jobs that already have a user_id are skipped).
+    """
+    if not JOBS.exists():
+        return 0
+    claimed = 0
+    for path in JOBS.glob("*.json"):
+        try:
+            state = json.loads(path.read_text())
+        except Exception:
+            continue
+        if state.get("user_id"):
+            continue
+        state["user_id"] = user_id
+        path.write_text(json.dumps(state, indent=2))
+        claimed += 1
+    return claimed
 
 
 def delete_job(job_id: str) -> bool:

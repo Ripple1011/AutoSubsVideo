@@ -7,14 +7,25 @@ No FFmpeg/MoviePy/ASR work runs inside request threads.
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, UploadFile, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
+from .auth import (
+    auth_backend,
+    claim_orphans_if_first_user,
+    create_db_and_tables,
+    current_active_user,
+    fastapi_users,
+    google_oauth_client,
+    _jwt_secret,
+)
 from .config import get_settings
 from .fonts import ensure_fonts_present
+from .schemas import UserRead, UserCreate, UserUpdate
 from .storage import (
     ALLOWED_EXTENSIONS,
+    claim_orphan_jobs,
     cleanup_old_jobs,
     delete_job,
     list_jobs,
@@ -45,12 +56,16 @@ app.add_middleware(
 #   /jobs/{id}/video   → <video src=...> can't attach custom headers, so the
 #                        random 12-char job ID is the soft secret here
 #   /export/soft       → <a href> downloads, same constraint
+#   /auth/*            → login routes must be reachable to log in
+#   /users/me          → frontend calls this to detect login state
 # Everything else requires the X-AutoSub-Password header to match
 # settings.shared_password when that setting is configured.
-_PUBLIC_GET_PATHS = ("/health",)
+_PUBLIC_GET_PATHS = ("/health", "/users/me")
 
 
 def _is_public_request(method: str, path: str) -> bool:
+    if path.startswith("/auth/"):
+        return True
     if method != "GET":
         return False
     if path in _PUBLIC_GET_PATHS:
@@ -84,14 +99,19 @@ async def shared_password_gate(request: Request, call_next):
 @app.on_event("startup")
 async def startup_tasks():
     """Boot-time housekeeping:
-      1. Make sure the bundled burn-in fonts are present on disk so libass
+      1. Create the users DB tables if missing (Slice 2).
+      2. Eagerly ensure the JWT secret is materialized so the first request
+         doesn't pay the .env-write cost.
+      3. Make sure the bundled burn-in fonts are present on disk so libass
          can find them via the `fontsdir=` filter argument (see
          video_worker.burn_subtitles). Downloads are idempotent; the only
          non-zero cost is the very first server boot.
-      2. Sweep stale jobs older than the configured retention window. Cheap
+      4. Sweep stale jobs older than the configured retention window. Cheap
          and silent when nothing's stale.
     """
     settings = get_settings()
+    await create_db_and_tables()
+    _jwt_secret()   # generates + persists if missing
     downloaded, failed = ensure_fonts_present()
     if downloaded:
         print(
@@ -105,6 +125,69 @@ async def startup_tasks():
             f"older than {settings.retention_days} days.",
             flush=True,
         )
+
+
+# ----- Auth routers --------------------------------------------------------
+
+# /auth/login + /auth/logout — cookie-based JWT session.
+app.include_router(
+    fastapi_users.get_auth_router(auth_backend),
+    prefix="/auth",
+    tags=["auth"],
+)
+# /users/me — current user profile.
+app.include_router(
+    fastapi_users.get_users_router(UserRead, UserUpdate),
+    prefix="/users",
+    tags=["users"],
+)
+# /auth/google/authorize + /auth/google/callback — Google OAuth flow.
+# Only mounted when credentials are configured. Without these, /auth/google/*
+# returns 404 and the frontend's "Continue with Google" button surfaces an
+# error — which is the right behavior for a misconfigured server.
+if google_oauth_client is not None:
+    app.include_router(
+        fastapi_users.get_oauth_router(
+            google_oauth_client,
+            auth_backend,
+            _jwt_secret(),
+            redirect_url=f"{get_settings().oauth_callback_base}/auth/google/callback",
+            associate_by_email=True,
+            is_verified_by_default=True,
+        ),
+        prefix="/auth/google",
+        tags=["auth"],
+    )
+
+    # The OAuth callback inside the library uses our cookie-transport, which
+    # responds 204 with Set-Cookie on success. That leaves the browser
+    # stranded on a blank page after the Google round-trip. This middleware
+    # promotes the 2xx success response into a 302 to the configured
+    # frontend URL, keeping the Set-Cookie header(s) intact so the session
+    # cookie lands the same way.
+    @app.middleware("http")
+    async def google_callback_redirect(request: Request, call_next):
+        response = await call_next(request)
+        if (
+            request.url.path == "/auth/google/callback"
+            and request.method == "GET"
+            and 200 <= response.status_code < 300
+        ):
+            response.status_code = 302
+            response.headers["location"] = get_settings().oauth_success_redirect
+        return response
+else:
+    print("[auth] Google OAuth NOT configured (GOOGLE_OAUTH_CLIENT_ID/SECRET unset).", flush=True)
+
+
+@app.post("/users/claim-orphans", tags=["users"])
+async def claim_my_orphans(user=Depends(current_active_user)):
+    """One-shot endpoint the frontend can call after first login to claim
+    pre-auth jobs that had no owner. Only does anything if the caller is
+    the first registered user. Idempotent — returns 0 after the first run."""
+    from .auth import claim_orphans_if_first_user
+    n = await claim_orphans_if_first_user(user)
+    return {"claimed": n}
 
 
 @app.get("/health")
@@ -155,6 +238,7 @@ async def upload(
     x_user_asr_key: str | None = Header(default=None),
     x_user_asr_provider: str | None = Header(default=None),
     x_user_asr_model: str | None = Header(default=None),
+    user=Depends(current_active_user),
 ):
     """Accept .mp4/.mov, persist to disk, register job, enqueue pipeline.
 
@@ -179,6 +263,7 @@ async def upload(
 
     state = {
         "id": job_id,
+        "user_id": str(user.id),
         "status": "queued",
         "language": language,
         "prompt": prompt or None,
@@ -216,46 +301,51 @@ async def upload(
 
 
 @app.get("/jobs")
-async def list_recent_jobs(limit: int = 20):
+async def list_recent_jobs(limit: int = 20, user=Depends(current_active_user)):
     """Recent jobs for the Recent Videos picker. Newest first, capped at
     `limit` (default 20). Each entry is a compact summary — no segments.
 
-    Sweeps stale jobs (older than settings.retention_days) before listing,
-    so the picker can't show entries that are about to disappear, and so
-    cleanup happens lazily on a route that gets hit anyway every time the
-    user opens the Recent dropdown.
+    Filters to the caller's user_id. Sweeps stale jobs (older than
+    settings.retention_days) before listing, so the picker can't show
+    entries that are about to disappear, and so cleanup happens lazily on
+    a route that gets hit anyway every time the user opens the Recent
+    dropdown.
     """
     cleanup_old_jobs(get_settings().retention_days)
-    return list_jobs(limit)
+    return list_jobs(limit, user_id=str(user.id))
 
 
 @app.delete("/jobs/{job_id}")
-async def delete_existing_job(job_id: str):
+async def delete_existing_job(job_id: str, user=Depends(current_active_user)):
     """Remove a job's state file + entire upload folder (source video and
     derived audio). Idempotent: 200 even if the job was already gone.
+    Returns 404 if the caller doesn't own the job.
     """
+    if not read_job(job_id, user_id=str(user.id)):
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     existed = delete_job(job_id)
     return {"ok": True, "existed": existed}
 
 
 @app.get("/jobs/{job_id}")
-async def job_status(job_id: str):
-    """Poll job state + transcription JSON when ready."""
-    state = read_job(job_id)
+async def job_status(job_id: str, user=Depends(current_active_user)):
+    """Poll job state + transcription JSON when ready. 404 when the caller
+    doesn't own the job (per-user isolation — see read_job)."""
+    state = read_job(job_id, user_id=str(user.id))
     if not state:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     return state
 
 
 @app.patch("/jobs/{job_id}")
-async def patch_job(job_id: str, body: dict):
+async def patch_job(job_id: str, body: dict, user=Depends(current_active_user)):
     """Persist user edits to a job's segments. Only `segments` is mutable
     through this endpoint — other state fields (status, language,
     filename, created_at) are immutable post-transcription. Used by the
     frontend's debounced auto-save when the user nudges timing or edits
     text in the sidebar.
     """
-    state = read_job(job_id)
+    state = read_job(job_id, user_id=str(user.id))
     if not state:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
 
@@ -418,7 +508,7 @@ def _to_vtt(segments: list[dict]) -> str:
 
 
 @app.post("/export/hard")
-def export_hard(job_id: str, style_schema: dict):
+def export_hard(job_id: str, style_schema: dict, user=Depends(current_active_user)):
     """Burn the styled subtitles into the source video and return the mp4.
 
     Sync def on purpose — FastAPI runs sync handlers on its threadpool, so
@@ -428,7 +518,7 @@ def export_hard(job_id: str, style_schema: dict):
     Renders into data/uploads/{job_id}/burned.mp4 and serves that file. Re-
     requests overwrite (deterministic for a given style + segments).
     """
-    state = read_job(job_id)
+    state = read_job(job_id, user_id=str(user.id))
     if not state:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     segments = state.get("segments") or []

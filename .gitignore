@@ -1,8 +1,11 @@
 # --- Secrets (NEVER commit) -------------------------------------------------
 .env
 *.env
+.env.*
+*.env.*
 backend/.env
 backend/.env.local
+backend/.env.txt
 .env.local
 .env.*.local
 
