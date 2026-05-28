@@ -29,6 +29,8 @@ from .credits import (
     refund_credit,
 )
 from . import plans as plans_module
+from . import payments as payments_module
+from . import credits as credits_module
 from .config import get_settings
 from .fonts import ensure_fonts_present
 from .schemas import UserRead, UserCreate, UserUpdate
@@ -342,6 +344,171 @@ async def admin_delete_plan(plan_id: str, _=Depends(current_superuser)):
         )
         await session.commit()
         return {"ok": True}
+
+
+# ----- Razorpay (Slice 3b) -------------------------------------------------
+
+@app.post("/admin/plans/{plan_id}/sync-to-razorpay", tags=["admin"])
+async def admin_sync_to_razorpay(
+    plan_id: str,
+    force: bool = False,
+    _=Depends(current_superuser),
+):
+    """Make a plan purchasable by registering it with Razorpay.
+
+    - One-time packs get a sentinel id ("one_time:{slug}") — no API call.
+    - Subscriptions get a real plan_XXXX id from Razorpay's Plan API.
+
+    `force=True` re-syncs even if razorpay_plan_id is already set. Useful
+    when an admin edits a subscription's price (Razorpay doesn't allow
+    editing an existing Plan; we have to create a new one and let the
+    old one die).
+    """
+    from sqlalchemy import select
+    from .auth import async_session_maker
+    try:
+        pid = uuid.UUID(plan_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid plan id.")
+    async with async_session_maker() as session:
+        plan = (await session.execute(
+            select(plans_module.Plan).where(plans_module.Plan.id == pid)
+        )).scalar_one_or_none()
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found.")
+        if plan.razorpay_plan_id and not force:
+            return {"ok": True, "razorpay_plan_id": plan.razorpay_plan_id, "already_synced": True}
+        try:
+            rzp_id = payments_module.sync_plan_to_razorpay(plan)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Razorpay sync failed: {e}")
+        plan.razorpay_plan_id = rzp_id
+        await session.commit()
+        await session.refresh(plan)
+        return {
+            "ok": True,
+            "razorpay_plan_id": rzp_id,
+            "plan": plans_module.to_dict(plan),
+        }
+
+
+@app.post("/checkout/{slug}", tags=["payments"])
+async def create_checkout(slug: str, user=Depends(current_active_user)):
+    """Start a checkout for the given plan slug. Returns the config the
+    frontend needs to invoke Razorpay's Checkout modal.
+
+    For one-time packs we create an Order; subscriptions get a different
+    code path (not implemented in this slice; we return 501).
+    """
+    from sqlalchemy import select
+    from .auth import async_session_maker
+    if not payments_module.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Payments are not configured on the server.",
+        )
+    async with async_session_maker() as session:
+        plan = (await session.execute(
+            select(plans_module.Plan).where(plans_module.Plan.slug == slug)
+        )).scalar_one_or_none()
+    if not plan or not plan.active:
+        raise HTTPException(status_code=404, detail=f"Plan '{slug}' not found.")
+    if not plan.razorpay_plan_id:
+        raise HTTPException(
+            status_code=409,
+            detail="This plan is not yet purchasable. Ask the admin to sync it to Razorpay.",
+        )
+
+    if plan.cadence == plans_module.CADENCE_ONE_TIME:
+        try:
+            order = payments_module.create_order(
+                plan.price_inr_paise,
+                slug=plan.slug,
+                user_email=user.email,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Razorpay order creation failed: {e}")
+        return {
+            "kind": "order",
+            "order_id": order["id"],
+            "key_id": get_settings().razorpay_key_id,
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "name": "AutoSub",
+            "description": plan.display_name,
+            "prefill": {"email": user.email},
+            "slug": plan.slug,
+        }
+
+    # Subscriptions — out of scope for this slice. Pack-10 UPI first.
+    raise HTTPException(
+        status_code=501,
+        detail="Subscription checkout is not implemented yet.",
+    )
+
+
+@app.post("/razorpay/verify", tags=["payments"])
+async def razorpay_verify(body: dict, user=Depends(current_active_user)):
+    """Frontend posts the success-handler payload from Razorpay Checkout.
+
+    On signature-valid payments we credit the user with the plan's
+    credits_granted and write a credit_grants row referencing the
+    razorpay_payment_id (payment_ref) so we can refund / reconcile later.
+
+    Idempotent against double-submit: if a grant already exists for the
+    same payment_id, we no-op and return the current balance.
+    """
+    required = {"razorpay_order_id", "razorpay_payment_id", "razorpay_signature", "slug"}
+    missing = required - set(body.keys())
+    if missing:
+        raise HTTPException(
+            status_code=400, detail=f"Missing fields: {sorted(missing)}.",
+        )
+
+    ok = payments_module.verify_payment_signature(
+        body["razorpay_order_id"],
+        body["razorpay_payment_id"],
+        body["razorpay_signature"],
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid payment signature.")
+
+    from sqlalchemy import select
+    from .auth import async_session_maker
+    from .credits import CreditGrant
+    async with async_session_maker() as session:
+        # Idempotency check: payment_ref unique per grant in practice; if
+        # we've already granted for this payment_id, return balance unchanged.
+        existing = (await session.execute(
+            select(CreditGrant).where(CreditGrant.payment_ref == body["razorpay_payment_id"])
+        )).scalar_one_or_none()
+        if existing:
+            balance = await credits_module.get_balance(user.id, session)
+            return {"ok": True, "balance": balance, "already_credited": True}
+
+        plan = (await session.execute(
+            select(plans_module.Plan).where(plans_module.Plan.slug == body["slug"])
+        )).scalar_one_or_none()
+        if not plan:
+            raise HTTPException(status_code=404, detail=f"Plan '{body['slug']}' not found.")
+
+        await credits_module.grant_credits(
+            user.id,
+            source=plan.slug,
+            credits=plan.credits_granted,
+            payment_ref=body["razorpay_payment_id"],
+            session=session,
+        )
+        await session.commit()
+        balance = await credits_module.get_balance(user.id, session)
+        return {
+            "ok": True,
+            "balance": balance,
+            "credited": plan.credits_granted,
+            "source": plan.slug,
+        }
 
 
 @app.get("/health")

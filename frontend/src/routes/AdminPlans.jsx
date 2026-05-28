@@ -124,6 +124,7 @@ function PlanRow({ plan, onSaved }) {
     active: plan.active,
   })
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [rowError, setRowError] = useState(null)
 
   const dirty = (
@@ -135,6 +136,19 @@ function PlanRow({ plan, onSaved }) {
     || Number(draft.sort_order) !== plan.sort_order
     || Boolean(draft.active) !== plan.active
   )
+
+  const sync = async () => {
+    setSyncing(true)
+    setRowError(null)
+    try {
+      await api(`/admin/plans/${plan.id}/sync-to-razorpay`, { method: 'POST' })
+      await onSaved()
+    } catch (e) {
+      setRowError(e.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -230,13 +244,27 @@ function PlanRow({ plan, onSaved }) {
           />
         </td>
         <td className={cell}>
-          {plan.razorpay_plan_id ? (
-            <span className="text-[10px] text-emerald-400 font-mono" title={plan.razorpay_plan_id}>
-              synced
-            </span>
-          ) : (
-            <span className="text-[10px] text-white/30">not synced</span>
-          )}
+          <div className="flex flex-col items-start gap-1">
+            {plan.razorpay_plan_id ? (
+              <span className="text-[10px] text-emerald-400 font-mono" title={plan.razorpay_plan_id}>
+                synced
+              </span>
+            ) : (
+              <span className="text-[10px] text-white/30">not synced</span>
+            )}
+            <button
+              onClick={sync}
+              disabled={syncing || (plan.razorpay_plan_id && plan.cadence === 'one_time')}
+              title={
+                plan.razorpay_plan_id && plan.cadence === 'one_time'
+                  ? 'One-time packs use a sentinel id; re-sync not required.'
+                  : 'Register this plan with Razorpay'
+              }
+              className="text-[10px] px-2 py-0.5 rounded border border-white/15 text-white/70 hover:text-white hover:border-white/40 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              {syncing ? '…' : plan.razorpay_plan_id ? 'Re-sync' : 'Sync'}
+            </button>
+          </div>
         </td>
         <td className={cell}>
           <button

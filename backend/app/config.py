@@ -60,6 +60,17 @@ class Settings(BaseSettings):
     # Where to send the user after a successful OAuth login (frontend URL).
     oauth_success_redirect: str = "http://localhost:5173/projects"
 
+    # --- Slice 3b: Razorpay -------------------------------------------------
+    # India-native checkout. Test keys (rzp_test_*) for localhost; live
+    # keys (rzp_live_*) only after the app is on a real domain with HTTPS
+    # because Razorpay's webhook delivery requires it.
+    razorpay_key_id: str | None = None        # env: RAZORPAY_KEY_ID
+    razorpay_key_secret: str | None = None    # env: RAZORPAY_KEY_SECRET
+    # Webhook secret comes later -- localhost can't receive Razorpay
+    # webhooks without ngrok/cloudflared. For test mode we verify via the
+    # client-side success handler's HMAC signature instead.
+    razorpay_webhook_secret: str | None = None  # env: RAZORPAY_WEBHOOK_SECRET
+
 
 def get_settings() -> Settings:
     return Settings()

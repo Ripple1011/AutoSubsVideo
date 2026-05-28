@@ -5,6 +5,154 @@ Both AI agents update this file at end of session. Read before starting.
 
 ---
 
+## 2026-05-28 (late night, ~02:00) · Windows agent — Slice 3b-continued: Razorpay integration (code complete, blocked on entity KYC)
+
+**Landed:**
+- `razorpay==1.4.2` Python SDK in `backend/requirements.txt`, plus
+  `setuptools>=70,<81` (the SDK still imports `pkg_resources` which is
+  removed in setuptools 81+).
+- `backend/app/payments.py` — single seam to the Razorpay SDK:
+  - `is_configured()` / `is_test_mode()` helpers (test mode is
+    detected by `rzp_test_` prefix on the key id).
+  - `create_order(amount_paise, slug, user_email)` — one-time pack
+    Orders. Echoes slug + email into Razorpay `notes` for webhook
+    attribution later.
+  - `verify_payment_signature(order_id, payment_id, signature)` —
+    HMAC-SHA256 over `{order_id}|{payment_id}` keyed with the
+    Razorpay secret. Constant-time compare via `hmac.compare_digest`.
+  - `sync_plan_to_razorpay(plan)` — packs return sentinel
+    `"one_time:{slug}"`; subscriptions call `client.plan.create()`
+    and return the resulting `plan_XXXX` id.
+- New endpoints in main.py:
+  - `POST /admin/plans/{id}/sync-to-razorpay` — admin button; idempotent
+    for packs; `force=true` re-syncs subscriptions when a new Razorpay
+    Plan is needed (price change).
+  - `POST /checkout/{slug}` — auth required; creates an Order for the
+    plan and returns `{key_id, order_id, amount, currency, name,
+    description, prefill, slug}` for the frontend to invoke Checkout.
+    Subscriptions return 501 (out of scope for this slice — packs first).
+  - `POST /razorpay/verify` — auth required; receives the success
+    handler payload, verifies signature, grants credits idempotently
+    via `payment_ref = razorpay_payment_id`. Returns
+    `{balance, credited, source}`.
+- Razorpay config in backend/app/config.py:
+  - `razorpay_key_id`, `razorpay_key_secret`, `razorpay_webhook_secret`
+    (last one unused until VPS+HTTPS so we can receive webhooks).
+
+**Frontend:**
+- `frontend/src/lib/razorpay.js` — lazy-loads
+  `https://checkout.razorpay.com/v1/checkout.js` on first Buy click.
+  Single-flight promise; subsequent calls reuse the SDK.
+- AdminPlans.jsx: per-row "Sync" / "Re-sync" button next to the
+  synced/not-synced badge. Disabled for one_time packs once synced
+  (their sentinel never needs re-syncing).
+- Pricing.jsx Buy flow:
+  1. POST `/checkout/{slug}` → backend creates Order, returns config.
+  2. `loadRazorpaySDK()`.
+  3. `new window.Razorpay({...}).open()`. Modal opens.
+  4. On success handler: POST `/razorpay/verify`. On success, dispatch
+     `autosub:credits-refresh` event (badge updates), navigate to
+     `/account`.
+  5. `payment.failed` event → render the error on the card.
+- Checkout options include
+  `method: { upi: true, card: true, netbanking: true, wallet: true }`
+  to force-show UPI as a tab (Razorpay sometimes hides it for
+  test-mode accounts without explicit method declaration).
+
+**Verified end-to-end up to the Razorpay gateway:**
+- Order creation works against the live Razorpay sandbox
+  (`order_Suli3Qzx1wKIx9` returned with amount=4900 INR status=created).
+- Sync button writes `razorpay_plan_id = "one_time:pack_10"`; UI flips
+  to "synced" badge; Pricing card "Buy now" becomes clickable.
+- Checkout modal opens correctly.
+
+**What is NOT verified (blocker is Razorpay-side):**
+- A real payment attempt with the official test card
+  `4111 1111 1111 1111` was REJECTED by Razorpay with "International
+  cards are not supported" — this is Razorpay's catch-all error
+  message for un-activated accounts. Razorpay tightened policy in
+  2024-2025: un-activated Indian accounts cannot process ANY payment
+  in test mode, not even with their own test cards.
+- UPI option is hidden in Checkout for the same reason — Razorpay's
+  Account & Settings → Checkout settings → Payment Configuration page
+  shows only Cards / Netbanking / Wallets / PayLater, no UPI toggle.
+  UPI appears once the account is activated.
+
+**Account activation blocker:**
+- Razorpay requires a one-time ₹199 KYC verification fee + business
+  KYC (PAN, bank account, business details) to activate the account.
+- User declined activation on the current test account because they
+  intend to use a different PAN + Aadhaar for the real business
+  entity (not yet incorporated). Paying ₹199 + KYC'ing twice (now,
+  then again with the real entity later) was correctly identified as
+  wasted effort.
+- Code stays committed; when the real business entity Razorpay
+  account is ready, paste new `RAZORPAY_KEY_ID` and
+  `RAZORPAY_KEY_SECRET` into VPS .env and the entire payment flow
+  works without further code changes.
+
+**Other decisions made today (no code impact):**
+- Domain choice: `vaacha.app` purchased on Porkbun ($10.81 first year,
+  $14.93 renewal). `.app` requires HTTPS via TLD-level HSTS preload
+  which dovetails with the VPS+HTTPS slice queued for the next session.
+  Other options considered + rejected:
+    - `kairoslab.live`: parent company domain, brand mismatch with
+      the product.
+    - `vaacha.tech` via free-first-year offer: $64/year renewal trap.
+    - `vaacha.tech` on Porkbun: $51/year renewal — same trap, slightly
+      cheaper bait.
+    - `vaacha.io` / `vaacha.ai`: better brand but 3-6× the cost of
+      `.app`. Defer until product is validated and budget supports it.
+- Payment provider choice: Razorpay confirmed over Cashfree / PhonePe
+  PG / PayU. Razorpay has the strongest UPI Autopay subscription
+  support in India and the deepest documentation; fee differences
+  (1.9-2.0% range) are noise until ₹5+ lakhs/month.
+
+**Files added:**
+- `backend/app/payments.py`
+- `frontend/src/lib/razorpay.js`
+
+**Files modified:**
+- `backend/app/config.py` (Razorpay env vars)
+- `backend/app/main.py` (3 new payment endpoints)
+- `backend/requirements.txt` (razorpay, setuptools pin)
+- `frontend/src/routes/AdminPlans.jsx` (Sync button)
+- `frontend/src/routes/Pricing.jsx` (Buy flow with Razorpay Checkout)
+
+**Queued for the next session (VPS deploy + HTTPS, ~3-4 hours):**
+- Point `vaacha.app` DNS A record at VPS `187.124.151.114`.
+- Update Google Cloud Console:
+  - Authorized JS origins: add `https://vaacha.app`.
+  - Authorized redirect URIs: add
+    `https://vaacha.app/auth/google/callback`.
+- Update VPS `backend/.env`:
+  - `OAUTH_CALLBACK_BASE=https://vaacha.app`
+  - `OAUTH_SUCCESS_REDIRECT=https://vaacha.app/projects`
+  - (All other secrets carried from local .env when ready.)
+- SSH to VPS, run `/root/autosub/deploy/update.sh` to pull the four
+  commits worth of work (Slice 1 routes through Slice 3b Razorpay).
+- nginx vhost: change `server_name` from `_` to `vaacha.app`.
+- certbot for Let's Encrypt cert: `certbot --nginx -d vaacha.app`.
+- Verify: visit `https://vaacha.app`, log in via Google, see Projects,
+  upload a video, see credits decrement.
+- VPS-only blockers to fix during deploy:
+  - The shared-password middleware was originally for "guard the IP
+    with one password." With real auth and a real domain, we may want
+    to retire it; verify behavior on the live URL first.
+
+**Queued for the session after that:**
+- Razorpay activation with the real business entity Razorpay account
+  (when entity exists).
+- Razorpay subscription endpoints (Monthly + Annual tiers; current
+  code only handles packs).
+- Razorpay webhook handler at `POST /razorpay/webhook` — requires
+  HTTPS, so VPS+HTTPS must land first. Verifies signature with
+  `RAZORPAY_WEBHOOK_SECRET`. Handles `payment.captured` (idempotent
+  duplicate of /razorpay/verify), `subscription.charged` (monthly
+  refills), `subscription.cancelled`.
+
+---
+
 ## 2026-05-28 (late night) · Windows agent — Slice 3b (pre-Razorpay): Plans + Admin + Pricing + Account
 
 **Landed:**

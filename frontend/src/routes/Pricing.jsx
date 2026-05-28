@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/apiClient'
+import { loadRazorpaySDK } from '../lib/razorpay'
 
 /**
  * /pricing — public list of purchasable plans.
@@ -56,7 +57,7 @@ export default function Pricing() {
       ) : (
         <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} />
+            <PlanCard key={plan.id} plan={plan} navigate={navigate} />
           ))}
         </ul>
       )}
@@ -79,8 +80,78 @@ const CADENCE_LABEL = {
   annual: 'per year',
 }
 
-function PlanCard({ plan }) {
+function PlanCard({ plan, navigate }) {
   const isSubscription = plan.cadence !== 'one_time'
+  const [buying, setBuying] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleBuy = async () => {
+    setBuying(true)
+    setError(null)
+    try {
+      // 1. Backend creates a Razorpay Order (one-time) or Subscription.
+      const cfg = await api(`/checkout/${plan.slug}`, { method: 'POST' })
+      // 2. Lazy-load Checkout SDK.
+      await loadRazorpaySDK()
+      // 3. Open the Razorpay Checkout modal. handler runs on success.
+      const options = {
+        key: cfg.key_id,
+        amount: cfg.amount,
+        currency: cfg.currency,
+        name: cfg.name,
+        description: cfg.description,
+        order_id: cfg.order_id,
+        prefill: cfg.prefill,
+        theme: { color: '#aa3bff' },
+        // Explicitly enable each payment method we want surfaced as a tab in
+        // the Checkout modal. Without this, test-mode Checkout sometimes
+        // hides UPI for accounts whose dashboard config doesn't have it
+        // toggled on yet. Methods the account genuinely doesn't support
+        // (e.g. EMI for new accounts) get dropped silently — harmless.
+        method: {
+          upi: true,
+          card: true,
+          netbanking: true,
+          wallet: true,
+        },
+        modal: {
+          ondismiss: () => setBuying(false),
+        },
+        handler: async (response) => {
+          try {
+            const verified = await api('/razorpay/verify', {
+              method: 'POST',
+              body: {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                slug: cfg.slug,
+              },
+            })
+            // Refresh the credits badge across the app, then go to Account.
+            try { window.dispatchEvent(new Event('autosub:credits-refresh')) } catch {}
+            navigate('/account')
+            // Tiny console log so devs can confirm balance updated.
+            console.log('[razorpay] credited', verified)
+          } catch (e) {
+            setError(`Payment captured but verification failed: ${e.message}`)
+          } finally {
+            setBuying(false)
+          }
+        },
+      }
+      const rzp = new window.Razorpay(options)
+      rzp.on('payment.failed', (resp) => {
+        setError(`Payment failed: ${resp.error?.description || 'unknown error'}`)
+        setBuying(false)
+      })
+      rzp.open()
+    } catch (e) {
+      setError(e.message)
+      setBuying(false)
+    }
+  }
+
   return (
     <li className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col">
       <div className="text-xs uppercase tracking-wide text-purple-400 mb-1">
@@ -108,20 +179,26 @@ function PlanCard({ plan }) {
       </div>
 
       <button
-        disabled={!plan.purchasable}
+        disabled={!plan.purchasable || buying}
         title={plan.purchasable ? '' : 'Coming soon — Razorpay setup in progress'}
-        onClick={() => {
-          // TODO Slice 3b-continued: POST /checkout/{slug} -> open Razorpay Checkout modal
-          alert('Checkout flow lands when Razorpay is configured.')
-        }}
+        onClick={handleBuy}
         className={`mt-5 px-4 py-2 rounded-full font-semibold text-sm transition-colors ${
           plan.purchasable
-            ? 'bg-purple-500 hover:bg-purple-400 text-white'
+            ? 'bg-purple-500 hover:bg-purple-400 text-white disabled:opacity-60'
             : 'bg-white/5 text-white/30 cursor-not-allowed'
         }`}
       >
-        {plan.purchasable ? 'Buy now' : 'Coming soon'}
+        {!plan.purchasable
+          ? 'Coming soon'
+          : buying
+          ? 'Opening…'
+          : 'Buy now'}
       </button>
+      {error && (
+        <div className="mt-2 text-[11px] rounded px-2 py-1 bg-rose-500/20 text-rose-200">
+          {error}
+        </div>
+      )}
     </li>
   )
 }

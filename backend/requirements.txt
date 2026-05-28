@@ -26,6 +26,10 @@ moviepy==1.0.3                    # stable 1.x line; 2.x changed import paths
 regex==2024.11.6                  # Unicode \X grapheme clusters for Devanagari /
                                   # Gujarati syllable-weight proportional splitting
 
+# --- Payments (Slice 3b) -------------------------------------------------
+razorpay==1.4.2                   # India-native checkout (UPI / cards / netbanking)
+setuptools>=70,<81                # razorpay 1.4.2 still imports pkg_resources; setuptools 81 dropped it
+
 # --- Auth (Slice 2) -----------------------------------------------------
 fastapi-users[sqlalchemy,oauth]==14.0.1   # user mgmt, JWT cookies, OAuth flow
 aiosqlite==0.20.0                         # async SQLAlchemy driver for SQLite
