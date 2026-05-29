@@ -12,6 +12,11 @@ import { BRAND, GRADIENTS, LOGO } from './lib/brand'
  * App shell. Persistent top bar + <Outlet/> for the active route. The
  * editor-specific header items (Export, Recent) only render on a
  * /projects/:id workspace route — they need a live jobId.
+ *
+ * Slice 6: authed app is light-themed for brand consistency with the
+ * public landing. The 9:16 video canvas inside the workspace stays
+ * dark (it mimics phone playback); everything else around it — top bar,
+ * sidebars, design controls, modals — is light.
  */
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -48,19 +53,11 @@ export default function App() {
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-[#0b0b0f] text-white">
-      <header className="px-6 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
-        <Link
-          to="/projects"
-          className="flex items-center bg-white rounded-2xl px-4 py-2 shadow-lg shadow-white/5"
-          title={BRAND.name}
-        >
-          {/* The logo PNG has a navy wordmark on transparent background.
-              On the dark app shell we need a white plate behind it for
-              legibility. The plate is sized generously (h-12 logo +
-              comfortable padding) so it reads as deliberate branding,
-              not a fallback. Drop this when a dark-mode variant of the
-              logo ships (wordmark in white, gradient V untouched). */}
+    <div className="h-full w-full flex flex-col bg-white text-slate-900">
+      <header className="px-6 py-3 border-b border-slate-200 bg-white flex items-center justify-between flex-shrink-0">
+        <Link to="/projects" className="flex items-center" title={BRAND.name}>
+          {/* Logo now sits directly on the white app bg — no plate
+              needed since the wordmark is navy. */}
           <img src={LOGO.full} alt={BRAND.name} className="h-12 w-auto block" />
         </Link>
         <div className="flex items-center gap-4 text-sm">
@@ -80,14 +77,17 @@ export default function App() {
             onDelete={handleDeleteRecent}
           />
           {user && <CreditsBadge />}
-          <button className="text-white/60 hover:text-white" onClick={() => setSettingsOpen(true)}>
+          <button
+            className="text-slate-600 hover:text-slate-900"
+            onClick={() => setSettingsOpen(true)}
+          >
             ⚙ Settings
           </button>
           {user && (
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen((v) => !v)}
-                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5"
+                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100"
                 title={user.email}
               >
                 <span
@@ -98,33 +98,33 @@ export default function App() {
                 </span>
               </button>
               {userMenuOpen && (
-                <div className="absolute right-0 mt-1 w-56 rounded border border-white/10 bg-[#16161d] shadow-lg z-30">
-                  <div className="px-3 py-2 text-xs text-white/60 border-b border-white/10 truncate">
+                <div className="absolute right-0 mt-1 w-56 rounded-xl border border-slate-200 bg-white shadow-lg z-30 overflow-hidden">
+                  <div className="px-3 py-2 text-xs text-slate-500 border-b border-slate-200 truncate">
                     {user.email}
                   </div>
                   <button
                     onClick={() => { setUserMenuOpen(false); navigate('/account') }}
-                    className="block w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5"
+                    className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                   >
                     Account & credits
                   </button>
                   <button
                     onClick={() => { setUserMenuOpen(false); navigate('/pricing') }}
-                    className="block w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5"
+                    className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                   >
                     Pricing
                   </button>
                   {user.is_superuser && (
                     <button
                       onClick={() => { setUserMenuOpen(false); navigate('/admin/plans') }}
-                      className="block w-full text-left px-3 py-2 text-sm text-[#a78bfa] hover:bg-white/5 border-t border-white/10"
+                      className="block w-full text-left px-3 py-2 text-sm text-[#7C3AED] font-semibold hover:bg-slate-100 border-t border-slate-200"
                     >
                       Manage plans (admin)
                     </button>
                   )}
                   <button
                     onClick={() => { setUserMenuOpen(false); handleLogout() }}
-                    className="block w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5 border-t border-white/10"
+                    className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 border-t border-slate-200"
                   >
                     Log out
                   </button>

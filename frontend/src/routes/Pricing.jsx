@@ -32,35 +32,36 @@ export default function Pricing() {
 
   const paymentsReady = plans.some((p) => p.purchasable)
 
-  // Logged-in users land here via the App shell (dark theme, with credit
-  // badge / avatar in the top bar). Logged-out users land here from the
-  // public Landing page and have no chrome yet — we render the same
-  // TopNav + FooterMini lockup the Landing/Privacy/Terms routes use.
+  // Slice 6: the authed app is also light now, so the same `content` works
+  // for both logged-in (rendered inside App shell) and logged-out (wrapped
+  // in PublicTopNav/Footer) cases. The PlanCard buttons differ slightly
+  // for logged-out users -- they bounce to /login instead of opening
+  // Razorpay -- which is handled by the `authed` prop.
   const content = (
     <div className="max-w-6xl mx-auto p-6 pb-12">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-semibold tracking-tight">Pricing</h2>
-        <p className={`text-sm mt-2 ${user ? 'text-white/50' : 'text-slate-600'}`}>
+        <h2 className="text-3xl font-semibold tracking-tight text-slate-900">Pricing</h2>
+        <p className="text-sm mt-2 text-slate-600">
           Every plan uses <span className="font-mono">Gemini 2.5 Pro</span> —
           best accuracy on Hindi, Gujarati, and English short-form video.
         </p>
       </div>
 
       {!paymentsReady && !loading && !error && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-700 text-xs px-4 py-3 mb-6 text-center">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs px-4 py-3 mb-6 text-center">
           Payment processing is being set up. Plans will become purchasable
           once Razorpay (UPI / cards / netbanking) integration is complete.
         </div>
       )}
 
       {error && (
-        <div className="rounded px-3 py-2 mb-4 bg-rose-500/20 text-rose-200 text-xs">
+        <div className="rounded px-3 py-2 mb-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs">
           {error}
         </div>
       )}
 
       {loading ? (
-        <p className={`text-sm text-center ${user ? 'text-white/40' : 'text-slate-500'}`}>
+        <p className="text-sm text-center text-slate-500">
           Loading plans…
         </p>
       ) : (
@@ -75,7 +76,7 @@ export default function Pricing() {
         <div className="mt-10 text-center">
           <button
             onClick={() => navigate('/projects')}
-            className="text-xs text-white/40 hover:text-white underline underline-offset-2"
+            className="text-xs text-slate-500 hover:text-slate-900 underline underline-offset-2"
           >
             ← Back to projects
           </button>
@@ -84,11 +85,10 @@ export default function Pricing() {
     </div>
   )
 
-  // Authed: the App shell provides background + nav, just return content.
+  // Authed: rendered inside App shell which already provides bg + nav.
   if (authLoading || user) return content
 
-  // Logged-out: wrap in the public marketing chrome (white bg + landing-
-  // style top nav and footer) so the page doesn't feel orphaned.
+  // Logged-out: wrap in the public marketing chrome.
   return (
     <div className="min-h-screen bg-white text-slate-800 font-[Inter]">
       <PublicTopNav />
@@ -218,16 +218,15 @@ function PlanCard({ plan, navigate, authed }) {
     }
   }
 
-  // Style switches based on context. authed = on the dark App shell (white-
-  // on-near-black). Logged-out = on the white public chrome.
-  const cardClass = authed
-    ? 'rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col'
-    : 'rounded-2xl border border-slate-200 bg-white p-5 flex flex-col hover:border-slate-300 transition-colors'
-  const cadenceClass = authed ? 'text-[#a78bfa]' : 'text-[#7C3AED]'
-  const titleClass = authed ? 'text-lg font-semibold text-white' : 'text-lg font-semibold text-slate-900'
-  const descClass = authed ? 'text-xs text-white/50 mt-1 min-h-[2.5rem]' : 'text-xs text-slate-500 mt-1 min-h-[2.5rem]'
-  const priceClass = authed ? 'text-3xl font-bold text-white' : 'text-3xl font-bold text-slate-900'
-  const subClass = authed ? 'text-[11px] text-white/40' : 'text-[11px] text-slate-400'
+  // Slice 6: app is light everywhere now, so the same card styles work for
+  // both authed and logged-out contexts. `authed` only affects button
+  // copy + behavior below (logged-out users bounce to /login on Buy).
+  const cardClass = 'rounded-2xl border border-slate-200 bg-white p-5 flex flex-col hover:border-slate-300 hover:shadow-md transition-all'
+  const cadenceClass = 'text-[#7C3AED]'
+  const titleClass = 'text-lg font-semibold text-slate-900'
+  const descClass = 'text-xs text-slate-500 mt-1 min-h-[2.5rem]'
+  const priceClass = 'text-3xl font-bold text-slate-900'
+  const subClass = 'text-[11px] text-slate-400'
 
   return (
     <li className={cardClass}>
@@ -248,10 +247,10 @@ function PlanCard({ plan, navigate, authed }) {
         )}
       </div>
 
-      <div className={`mt-3 text-sm ${authed ? 'text-white/70' : 'text-slate-600'}`}>
+      <div className="mt-3 text-sm text-slate-600">
         🪙 {plan.credits_granted.toLocaleString('en-IN')} videos
         {plan.rollover_cap && (
-          <span className={`text-xs ${authed ? 'text-white/40' : 'text-slate-400'}`}> · rolls over up to {plan.rollover_cap}</span>
+          <span className="text-xs text-slate-400"> · rolls over up to {plan.rollover_cap}</span>
         )}
       </div>
 
@@ -263,16 +262,12 @@ function PlanCard({ plan, navigate, authed }) {
             : 'Sign in to purchase'
         }
         onClick={handleBuy}
+        style={(authed && !plan.purchasable) ? undefined : { background: GRADIENTS.horizontal }}
         className={
-          authed
-            ? `mt-5 px-4 py-2 rounded-full font-semibold text-sm transition-colors ${
-                plan.purchasable
-                  ? 'bg-[#7C3AED] hover:bg-[#6D28D9] text-white disabled:opacity-60'
-                  : 'bg-white/5 text-white/30 cursor-not-allowed'
-              }`
-            : 'mt-5 px-4 py-2 rounded-full font-semibold text-sm transition-shadow shadow-md hover:shadow-lg text-white'
+          authed && !plan.purchasable
+            ? 'mt-5 px-4 py-2 rounded-full font-semibold text-sm bg-slate-100 text-slate-400 cursor-not-allowed'
+            : 'mt-5 px-4 py-2 rounded-full font-semibold text-sm shadow-md hover:shadow-lg transition-shadow text-white disabled:opacity-60'
         }
-        style={authed ? undefined : { background: GRADIENTS.horizontal }}
       >
         {!authed
           ? 'Sign in to buy'

@@ -36,14 +36,14 @@ export default function RenderPreviewModal({ open, videoUrl, filename, onDownloa
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[min(96vw,1100px)] max-h-[min(92vh,900px)] flex flex-col bg-[#0f0f15] rounded-xl overflow-hidden border border-white/10 shadow-2xl"
+        className="w-full max-w-[min(96vw,1100px)] max-h-[min(92vh,900px)] flex flex-col bg-white rounded-xl overflow-hidden border border-slate-200 shadow-2xl"
       >
-        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
           <div className="min-w-0">
-            <div className="text-sm text-white truncate">{filename || 'Burned video preview'}</div>
-            <div className="text-[11px] text-white/40">Subtitles are baked into the frames — fullscreen shows them.</div>
+            <div className="text-sm text-slate-900 truncate font-medium">{filename || 'Burned video preview'}</div>
+            <div className="text-[11px] text-slate-500">Subtitles are baked into the frames — fullscreen shows them.</div>
           </div>
-          <button onClick={onClose} className="text-white/60 hover:text-white text-lg leading-none px-2">
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-lg leading-none px-2">
             ×
           </button>
         </div>
@@ -58,14 +58,14 @@ export default function RenderPreviewModal({ open, videoUrl, filename, onDownloa
               className="max-w-full max-h-full"
             />
           ) : (
-            <div className="text-white/40 text-sm">No video to preview.</div>
+            <div className="text-white/60 text-sm">No video to preview.</div>
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-white/10 flex items-center justify-end gap-2">
+        <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded bg-white/5 hover:bg-white/10 text-white/80"
+            className="px-4 py-2 text-sm rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
           >
             Close
           </button>

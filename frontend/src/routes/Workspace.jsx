@@ -35,14 +35,14 @@ export default function Workspace() {
   if (ws.restoring) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-white/50">Loading project…</p>
+        <p className="text-sm text-slate-500">Loading project…</p>
       </div>
     )
   }
   if (ws.restoreError) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-rose-300">
+        <p className="text-sm text-rose-600">
           Could not load this project: {ws.restoreError}. Redirecting…
         </p>
       </div>
@@ -51,7 +51,7 @@ export default function Workspace() {
   if (!ws.videoUrl) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Link to="/projects" className="text-sm text-white/60 underline">
+        <Link to="/projects" className="text-sm text-slate-600 underline">
           Project not available — back to Projects
         </Link>
       </div>
@@ -59,8 +59,8 @@ export default function Workspace() {
   }
 
   return (
-    <main className="flex-1 grid grid-cols-[minmax(16rem,22%)_1fr_minmax(18rem,28%)] gap-0 min-h-0">
-      <section className="border-r border-white/10 overflow-y-auto min-h-0">
+    <main className="flex-1 grid grid-cols-[minmax(16rem,22%)_1fr_minmax(18rem,28%)] gap-0 min-h-0 bg-white">
+      <section className="border-r border-slate-200 overflow-y-auto min-h-0 bg-slate-50">
         <SubtitleSidebar
           segments={ws.segments}
           originalSegments={ws.originalSegments}
@@ -70,7 +70,7 @@ export default function Workspace() {
           style={styleSchema}
         />
       </section>
-      <section className="flex items-center justify-center bg-black/50 min-h-0 p-4">
+      <section className="flex items-center justify-center bg-slate-900 min-h-0 p-4">
         <VideoCanvas
           videoUrl={ws.videoUrl}
           segments={ws.segments}
@@ -80,7 +80,7 @@ export default function Workspace() {
           jobId={ws.jobId}
         />
       </section>
-      <section className="border-l border-white/10 overflow-y-auto min-h-0">
+      <section className="border-l border-slate-200 overflow-y-auto min-h-0 bg-white">
         <DesignControls value={styleSchema} onChange={setStyleSchema} segments={ws.segments} />
       </section>
     </main>

@@ -38,17 +38,17 @@ export default function AdminPlans() {
   // Guard route. Backend already rejects non-superuser with 403, but
   // showing a friendlier message in the UI saves the round-trip.
   if (authLoading) {
-    return <p className="p-6 text-white/40 text-sm">Checking permissions…</p>
+    return <p className="p-6 text-slate-500 text-sm">Checking permissions…</p>
   }
   if (!user?.is_superuser) {
     return (
       <div className="max-w-md mx-auto p-6 text-center">
-        <p className="text-sm text-rose-300">
+        <p className="text-sm text-rose-600">
           This page is restricted to administrators.
         </p>
         <button
           onClick={() => navigate('/projects')}
-          className="mt-4 text-xs text-white/60 hover:text-white underline underline-offset-2"
+          className="mt-4 text-xs text-slate-600 hover:text-slate-900 underline underline-offset-2"
         >
           ← Back to projects
         </button>
@@ -61,7 +61,7 @@ export default function AdminPlans() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Plan Management</h2>
-          <p className="text-xs text-white/40 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Edit prices, credits, or visibility. Slug and cadence are immutable
             after creation.
           </p>
@@ -69,17 +69,17 @@ export default function AdminPlans() {
       </div>
 
       {error && (
-        <div className="rounded px-3 py-2 mb-4 bg-rose-500/20 text-rose-200 text-xs">
+        <div className="rounded px-3 py-2 mb-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs">
           {error}
         </div>
       )}
 
       {loading ? (
-        <p className="text-white/40 text-sm">Loading…</p>
+        <p className="text-slate-500 text-sm">Loading…</p>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-white/40 uppercase tracking-wide text-xs">
+            <tr className="text-left text-slate-500 uppercase tracking-wide text-xs">
               <th className="py-2 pr-3 font-normal">Slug</th>
               <th className="py-2 pr-3 font-normal">Name</th>
               <th className="py-2 pr-3 font-normal">Description</th>
@@ -104,7 +104,7 @@ export default function AdminPlans() {
       <div className="mt-10 text-center">
         <button
           onClick={() => navigate('/projects')}
-          className="text-xs text-white/40 hover:text-white underline underline-offset-2"
+          className="text-xs text-slate-500 hover:text-slate-900 underline underline-offset-2"
         >
           ← Back to projects
         </button>
@@ -175,13 +175,13 @@ function PlanRow({ plan, onSaved }) {
   }
 
   const cell = "py-2 pr-3 align-top"
-  const inputCls = "w-full bg-[#1a1a22] text-white rounded px-2 py-1 text-xs border border-white/10"
+  const inputCls = "w-full bg-white text-slate-900 rounded px-2 py-1 text-xs border border-slate-300 focus:border-slate-500 focus:outline-none"
 
   return (
     <>
-      <tr className="border-t border-white/5">
+      <tr className="border-t border-slate-100">
         <td className={cell}>
-          <span className="font-mono text-xs text-white/60">{plan.slug}</span>
+          <span className="font-mono text-xs text-slate-600">{plan.slug}</span>
         </td>
         <td className={cell}>
           <input
@@ -216,7 +216,7 @@ function PlanRow({ plan, onSaved }) {
           />
         </td>
         <td className={cell}>
-          <span className="font-mono text-xs text-white/60">{plan.cadence}</span>
+          <span className="font-mono text-xs text-slate-600">{plan.cadence}</span>
         </td>
         <td className={cell}>
           <input
@@ -250,7 +250,7 @@ function PlanRow({ plan, onSaved }) {
                 synced
               </span>
             ) : (
-              <span className="text-[10px] text-white/30">not synced</span>
+              <span className="text-[10px] text-slate-400">not synced</span>
             )}
             <button
               onClick={sync}
@@ -260,7 +260,7 @@ function PlanRow({ plan, onSaved }) {
                   ? 'One-time packs use a sentinel id; re-sync not required.'
                   : 'Register this plan with Razorpay'
               }
-              className="text-[10px] px-2 py-0.5 rounded border border-white/15 text-white/70 hover:text-white hover:border-white/40 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="text-[10px] px-2 py-0.5 rounded border border-slate-300 text-slate-700 hover:text-slate-900 hover:border-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {syncing ? '…' : plan.razorpay_plan_id ? 'Re-sync' : 'Sync'}
             </button>
@@ -270,15 +270,15 @@ function PlanRow({ plan, onSaved }) {
           <button
             onClick={save}
             disabled={!dirty || saving}
-            className="text-xs px-3 py-1 rounded bg-[#7C3AED] hover:bg-[#6D28D9] disabled:bg-white/10 disabled:text-white/40 font-semibold"
+            className="text-xs px-3 py-1 rounded bg-[#7C3AED] text-white hover:bg-[#6D28D9] disabled:bg-slate-200 disabled:text-slate-400 font-semibold"
           >
             {saving ? '…' : 'Save'}
           </button>
         </td>
       </tr>
       {rowError && (
-        <tr className="border-t border-rose-500/30">
-          <td colSpan={11} className="py-1.5 px-3 text-xs text-rose-200 bg-rose-500/10">
+        <tr className="border-t border-rose-200">
+          <td colSpan={11} className="py-1.5 px-3 text-xs text-rose-700 bg-rose-50">
             {rowError}
           </td>
         </tr>

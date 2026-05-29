@@ -42,7 +42,7 @@ export default function SubtitleSidebar({ segments, originalSegments, activeInde
 
   if (segments.length === 0) {
     return (
-      <div className="p-6 text-white/40 text-sm">
+      <div className="p-6 text-slate-500 text-sm">
         Transcription will appear here once processing completes.
       </div>
     )
@@ -56,8 +56,8 @@ export default function SubtitleSidebar({ segments, originalSegments, activeInde
   return (
     <>
       {hasEdits && (
-        <div className="px-3 py-2 border-b border-white/5 flex items-center justify-between bg-amber-500/5">
-          <span className="text-[11px] text-amber-200/70">
+        <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between bg-amber-50">
+          <span className="text-[11px] text-amber-800 font-medium">
             Edits saved · ⌘Z to undo
           </span>
           <button
@@ -68,29 +68,29 @@ export default function SubtitleSidebar({ segments, originalSegments, activeInde
               )
               if (ok) onEdit(originalSegments)
             }}
-            className="text-[11px] text-amber-200/80 hover:text-amber-100 hover:underline"
+            className="text-[11px] text-amber-700 hover:text-amber-900 hover:underline"
             title="Restore every segment to the originally transcribed values"
           >
             ↻ Reset all
           </button>
         </div>
       )}
-      <ul className="divide-y divide-white/5">
+      <ul className="divide-y divide-slate-200">
       {segments.map((s, i) => {
-        const stripeColor = colorForSpeaker(s.speaker, speakerOrder, '#FFFFFF', overrides)
+        const stripeColor = colorForSpeaker(s.speaker, speakerOrder, '#94a3b8', overrides)
         return (
           <li
             key={i}
             className={`p-3 cursor-pointer border-l-[3px] transition-colors ${
               i === activeIndex
-                ? 'bg-gradient-to-r from-[#7C3AED]/15 via-white/[0.04] to-transparent'
-                : 'hover:bg-white/5'
+                ? 'bg-gradient-to-r from-[#7C3AED]/10 via-[#7C3AED]/[0.04] to-transparent'
+                : 'hover:bg-slate-100'
             }`}
             style={{ borderLeftColor: stripeColor }}
             onClick={() => onSelect(i)}
           >
             <div
-              className="text-xs text-white/40 mb-1 flex items-center gap-1.5 group/timing"
+              className="text-xs text-slate-500 mb-1 flex items-center gap-1.5 group/timing"
               onClick={(e) => e.stopPropagation()}
               title="Shift-click ± for 1s coarse step"
             >
@@ -98,19 +98,19 @@ export default function SubtitleSidebar({ segments, originalSegments, activeInde
                 value={s.start}
                 onDelta={(delta) => updateTiming(i, s.start + delta, s.end)}
               />
-              <span className="text-white/30">→</span>
+              <span className="text-slate-400">→</span>
               <TimeStepper
                 value={s.end}
                 onDelta={(delta) => updateTiming(i, s.start, s.end + delta)}
               />
               {showSpeakerLabels && s.speaker && (
-                <span className="text-white/30 ml-1">· {s.speaker}</span>
+                <span className="text-slate-400 ml-1">· {s.speaker}</span>
               )}
             </div>
             <input
               value={s.text}
               onChange={(e) => updateText(i, e.target.value)}
-              className="w-full bg-transparent outline-none text-sm"
+              className="w-full bg-transparent outline-none text-sm text-slate-900"
             />
           </li>
         )
@@ -142,7 +142,7 @@ function TimeStepper({ value, onDelta }) {
     <span className="inline-flex items-center gap-0.5 font-mono">
       <button
         onClick={step(-1)}
-        className="px-1 rounded text-white/30 hover:text-white hover:bg-white/10 opacity-50 group-hover/timing:opacity-100 leading-none"
+        className="px-1 rounded text-slate-400 hover:text-slate-900 hover:bg-slate-200 opacity-50 group-hover/timing:opacity-100 leading-none"
         tabIndex={-1}
         aria-label="Step earlier"
       >
@@ -151,7 +151,7 @@ function TimeStepper({ value, onDelta }) {
       <span className="tabular-nums select-none">{fmt(value)}</span>
       <button
         onClick={step(+1)}
-        className="px-1 rounded text-white/30 hover:text-white hover:bg-white/10 opacity-50 group-hover/timing:opacity-100 leading-none"
+        className="px-1 rounded text-slate-400 hover:text-slate-900 hover:bg-slate-200 opacity-50 group-hover/timing:opacity-100 leading-none"
         tabIndex={-1}
         aria-label="Step later"
       >

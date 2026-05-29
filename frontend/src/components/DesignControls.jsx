@@ -70,7 +70,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
   return (
     <div className="p-4 space-y-4 text-sm">
       <div className="space-y-2">
-        <div className="text-[11px] uppercase tracking-wide text-white/40">
+        <div className="text-[11px] uppercase tracking-wide text-slate-500">
           Style Presets
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -85,11 +85,11 @@ export default function DesignControls({ value, onChange, segments = [] }) {
                 className={`
                   flex items-center justify-center px-2 py-2 rounded transition-all
                   ${isActive
-                    ? 'ring-2 ring-[#7C3AED] ring-offset-2 ring-offset-[#0b0b0f]'
-                    : 'hover:bg-white/5 ring-1 ring-white/10'}
+                    ? 'ring-2 ring-[#7C3AED] ring-offset-2 ring-offset-white'
+                    : 'hover:opacity-80 ring-1 ring-slate-200'}
                 `}
                 style={{
-                  backgroundColor: p.style.highlightTransparent ? 'rgba(255,255,255,0.02)' : p.style.highlightColor,
+                  backgroundColor: p.style.highlightTransparent ? '#f1f5f9' : p.style.highlightColor,
                 }}
               >
                 <span
@@ -108,19 +108,19 @@ export default function DesignControls({ value, onChange, segments = [] }) {
             )
           })}
         </div>
-        <div className="text-[10px] text-white/30">
+        <div className="text-[10px] text-slate-400">
           {activePreset ? `Using ${activePreset.name}` : 'Custom — tweak any field below'}
         </div>
       </div>
 
-      <div className="border-t border-white/10 -mx-4" />
+      <div className="border-t border-slate-200 -mx-4" />
 
       <label className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Font</span>
+        <span className="text-slate-700">Font</span>
         <select
           value={value.font}
           onChange={(e) => set('font', e.target.value)}
-          className="bg-[#1a1a22] text-white rounded px-2 py-1 border border-white/10"
+          className="bg-white text-slate-900 rounded px-2 py-1 border border-slate-200"
         >
           {FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
@@ -132,8 +132,8 @@ export default function DesignControls({ value, onChange, segments = [] }) {
       <ColorPicker label="Outline"   value={value.outlineColor}   onChange={(v) => set('outlineColor', v)} />
 
       {showSpeakerSection && (
-        <div className="space-y-1 rounded bg-white/[0.025] border border-white/10 p-2">
-          <div className="text-[11px] uppercase tracking-wide text-white/40 mb-1">
+        <div className="space-y-1 rounded bg-slate-50 border border-slate-200 p-2">
+          <div className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">
             Speaker Colors
           </div>
           {speakerOrder.map((label) => {
@@ -151,7 +151,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
                 <button
                   onClick={() => clearSpeakerColor(label)}
                   disabled={!override}
-                  className="text-[10px] px-2 py-1 rounded text-white/40 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="text-[10px] px-2 py-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
                   title={override ? 'Revert to auto-assigned color' : 'Using auto-assigned color'}
                 >
                   ⟲
@@ -164,7 +164,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
       <div className="space-y-1">
         <ColorPicker label="Highlight" value={value.highlightColor} onChange={(v) => set('highlightColor', v)} />
         <div className="flex items-center justify-between gap-3">
-          <span className="text-white/70">Background</span>
+          <span className="text-slate-700">Background</span>
           <div className="flex gap-1">
             {[
               { val: false, label: 'On' },
@@ -174,7 +174,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
                 key={b.label}
                 onClick={() => set('highlightTransparent', b.val)}
                 className={`px-3 py-1 rounded text-xs ${
-                  Boolean(value.highlightTransparent) === b.val ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
+                  Boolean(value.highlightTransparent) === b.val ? 'bg-[#7C3AED] text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
                 {b.label}
@@ -198,7 +198,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
         return (
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-white/70" title={disableTitle}>Karaoke</span>
+              <span className="text-slate-700" title={disableTitle}>Karaoke</span>
               <div className="flex gap-1">
                 {[
                   { val: true,  label: 'On' },
@@ -210,7 +210,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
                     onClick={() => set('karaokeEnabled', b.val)}
                     title={disableTitle}
                     className={`px-3 py-1 rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed ${
-                      Boolean(value.karaokeEnabled) === b.val ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
+                      Boolean(value.karaokeEnabled) === b.val ? 'bg-[#7C3AED] text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                     }`}
                   >
                     {b.label}
@@ -219,7 +219,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
               </div>
             </div>
             {!hasWordTimestamps && (
-              <div className="text-[10px] text-white/40 leading-snug">
+              <div className="text-[10px] text-slate-500 leading-snug">
                 Word timestamps not available for this transcription.
                 Re-upload with <span className="font-mono">gemini-2.5-flash</span> or
                 <span className="font-mono"> gemini-2.5-pro</span> to enable karaoke.
@@ -237,7 +237,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
       })()}
 
       <label className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Scale</span>
+        <span className="text-slate-700">Scale</span>
         <input
           type="range" min="0.5" max="2.5" step="0.05"
           value={value.scale}
@@ -248,14 +248,14 @@ export default function DesignControls({ value, onChange, segments = [] }) {
       </label>
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Align</span>
+        <span className="text-slate-700">Align</span>
         <div className="flex gap-1">
           {ALIGNMENTS.map((a) => (
             <button
               key={a}
               onClick={() => set('verticalAlignment', a)}
               className={`px-3 py-1 rounded text-xs capitalize ${
-                value.verticalAlignment === a ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
+                value.verticalAlignment === a ? 'bg-[#7C3AED] text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
               {a}
@@ -265,14 +265,14 @@ export default function DesignControls({ value, onChange, segments = [] }) {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Animation</span>
+        <span className="text-slate-700">Animation</span>
         <div className="flex gap-1">
           {ANIMATIONS.map((a) => (
             <button
               key={a.value}
               onClick={() => set('animation', a.value)}
               className={`px-3 py-1 rounded text-xs ${
-                value.animation === a.value ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
+                value.animation === a.value ? 'bg-[#7C3AED] text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
               {a.label}
@@ -282,7 +282,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Anim Speed</span>
+        <span className="text-slate-700">Anim Speed</span>
         <div className="flex gap-1">
           {SPEEDS.map((s) => (
             <button
@@ -290,7 +290,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
               disabled={!value.animation || value.animation === 'none'}
               onClick={() => set('animationSpeed', s)}
               className={`px-3 py-1 rounded text-xs capitalize disabled:opacity-30 ${
-                value.animationSpeed === s ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
+                value.animationSpeed === s ? 'bg-[#7C3AED] text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
               {s}

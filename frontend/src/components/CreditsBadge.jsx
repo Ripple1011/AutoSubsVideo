@@ -11,7 +11,7 @@ export default function CreditsBadge() {
   const { balance, loading } = useCredits()
 
   if (loading) return (
-    <span className="px-3 py-1 rounded-full bg-white/5 text-xs text-white/40 font-mono">
+    <span className="px-3 py-1 rounded-full bg-slate-100 text-xs text-slate-400 font-mono">
       …
     </span>
   )
@@ -22,7 +22,7 @@ export default function CreditsBadge() {
     <span
       title={`${balance} credit${balance === 1 ? '' : 's'} remaining`}
       className={`px-3 py-1 rounded-full text-xs font-mono font-semibold ${
-        low ? 'bg-rose-500/20 text-rose-200' : 'bg-[#7C3AED]/20 text-[#c4b5fd]'
+        low ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-[#7C3AED]/10 text-[#7C3AED] border border-[#7C3AED]/20'
       }`}
     >
       🪙 {balance}

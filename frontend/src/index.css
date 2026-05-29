@@ -3,8 +3,8 @@
 html, body, #root {
   margin: 0;
   height: 100%;
-  background: #0b0b0f;
-  color: #f5f5f7;
+  background: #ffffff;
+  color: #0f172a;
   /* Inter is the primary UI typeface across Vaacha. System fallbacks keep
      the page legible while the webfont loads. */
   font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;

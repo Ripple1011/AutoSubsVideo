@@ -55,7 +55,7 @@ export default function ProjectsList() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Projects</h2>
-          <p className="text-xs text-white/40 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             {jobs.length === 0 ? 'No projects yet.' : `${jobs.length} project${jobs.length === 1 ? '' : 's'}`}
           </p>
         </div>
@@ -68,13 +68,13 @@ export default function ProjectsList() {
       </div>
 
       {error && (
-        <div className="text-xs rounded px-3 py-2 mb-4 bg-rose-500/20 text-rose-200">
+        <div className="text-xs rounded px-3 py-2 mb-4 bg-rose-50 border border-rose-200 text-rose-700">
           {error}
         </div>
       )}
 
       {loading && jobs.length === 0 ? (
-        <p className="text-white/40 text-sm">Loading…</p>
+        <p className="text-slate-500 text-sm">Loading…</p>
       ) : jobs.length === 0 ? (
         <EmptyState onCreate={() => navigate('/projects/new')} />
       ) : (
@@ -97,22 +97,22 @@ function ProjectCard({ job, onOpen, onDelete }) {
   const date = job.created_at ? new Date(job.created_at).toLocaleString() : ''
   const ready = job.status === 'ready'
   return (
-    <li className="group relative rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/30 transition-colors">
+    <li className="group relative rounded-xl overflow-hidden bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all">
       <button onClick={onOpen} disabled={!ready} className="block w-full text-left disabled:cursor-not-allowed">
-        <div className="aspect-video bg-black/50 overflow-hidden relative">
+        <div className="aspect-video bg-slate-900 overflow-hidden relative">
           {ready ? (
             <ThumbImage jobId={job.id} alt={job.filename || job.id} />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-white/40 text-xs">
+            <div className="w-full h-full flex items-center justify-center text-white/60 text-xs">
               {STATUS_LABEL[job.status] || job.status}
             </div>
           )}
         </div>
         <div className="p-3">
-          <div className="font-medium text-sm truncate" title={job.filename}>
+          <div className="font-medium text-sm truncate text-slate-900" title={job.filename}>
             {job.filename || job.id}
           </div>
-          <div className="text-xs text-white/40 mt-0.5 flex items-center gap-2">
+          <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
             <span>{date}</span>
             {job.language && (
               <>
@@ -123,7 +123,7 @@ function ProjectCard({ job, onOpen, onDelete }) {
             {!ready && (
               <>
                 <span>·</span>
-                <span className="text-amber-400">{STATUS_LABEL[job.status]}</span>
+                <span className="text-amber-600">{STATUS_LABEL[job.status]}</span>
               </>
             )}
           </div>
@@ -131,7 +131,7 @@ function ProjectCard({ job, onOpen, onDelete }) {
       </button>
       <button
         onClick={onDelete}
-        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white/60 hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition"
+        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 text-slate-500 hover:bg-rose-500 hover:text-white opacity-0 group-hover:opacity-100 transition shadow-sm"
         title="Delete project"
       >
         ✕
@@ -144,7 +144,7 @@ function ThumbImage({ jobId, alt }) {
   const [failed, setFailed] = useState(false)
   if (failed) {
     return (
-      <div className="w-full h-full flex items-center justify-center text-white/30 text-xs">
+      <div className="w-full h-full flex items-center justify-center text-white/50 text-xs">
         (no thumbnail)
       </div>
     )
@@ -161,8 +161,8 @@ function ThumbImage({ jobId, alt }) {
 
 function EmptyState({ onCreate }) {
   return (
-    <div className="border-2 border-dashed border-white/15 rounded-2xl p-16 text-center">
-      <p className="text-white/70 mb-4">No projects yet.</p>
+    <div className="border-2 border-dashed border-slate-200 rounded-2xl p-16 text-center bg-slate-50">
+      <p className="text-slate-600 mb-4">No projects yet.</p>
       <button
         onClick={onCreate}
         style={{ background: GRADIENTS.horizontal }}

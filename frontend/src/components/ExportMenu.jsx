@@ -83,11 +83,11 @@ export default function ExportMenu({ jobId, styleSchema }) {
 
   return (
     <div ref={wrapperRef} className="relative">
-      <button onClick={() => setOpen((v) => !v)} className="text-white/60 hover:text-white">
+      <button onClick={() => setOpen((v) => !v)} className="text-slate-600 hover:text-slate-900">
         ↓ Export
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-[#15151c] border border-white/10 rounded-lg shadow-xl z-50 py-1">
+        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
           {[
             { fmt: 'srt', label: 'Download .srt', sub: 'SubRip — for YouTube uploads, editors' },
             { fmt: 'vtt', label: 'Download .vtt', sub: 'WebVTT — for web players' },
@@ -96,27 +96,27 @@ export default function ExportMenu({ jobId, styleSchema }) {
               key={opt.fmt}
               href={linkFor(opt.fmt)}
               onClick={() => setOpen(false)}
-              className="block px-3 py-2 hover:bg-white/5 text-sm"
+              className="block px-3 py-2 hover:bg-slate-50 text-sm"
             >
-              <div className="text-white">{opt.label}</div>
-              <div className="text-[11px] text-white/40">{opt.sub}</div>
+              <div className="text-slate-900">{opt.label}</div>
+              <div className="text-[11px] text-slate-500">{opt.sub}</div>
             </a>
           ))}
-          <div className="border-t border-white/10 my-1" />
+          <div className="border-t border-slate-200 my-1" />
           <button
             onClick={handleBurn}
             disabled={burning}
-            className="block w-full text-left px-3 py-2 hover:bg-white/5 text-sm disabled:opacity-50"
+            className="block w-full text-left px-3 py-2 hover:bg-slate-50 text-sm disabled:opacity-50"
           >
-            <div className="text-white">
+            <div className="text-slate-900">
               {burning ? 'Rendering…' : 'Preview burned video'}
             </div>
-            <div className="text-[11px] text-white/40">
+            <div className="text-[11px] text-slate-500">
               {burning ? 'FFmpeg is overlaying subtitles' : 'Render, watch, then download .mp4'}
             </div>
           </button>
           {error && (
-            <div className="mx-2 my-1 px-2 py-1 text-[11px] rounded bg-rose-500/20 text-rose-200">
+            <div className="mx-2 my-1 px-2 py-1 text-[11px] rounded bg-rose-50 text-rose-700 border border-rose-200">
               {error}
             </div>
           )}

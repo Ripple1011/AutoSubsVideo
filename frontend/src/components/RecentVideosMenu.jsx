@@ -65,35 +65,35 @@ export default function RecentVideosMenu({ currentJobId, onPick, onDelete }) {
 
   return (
     <div ref={wrapperRef} className="relative">
-      <button onClick={handleToggle} className="text-white/60 hover:text-white">
+      <button onClick={handleToggle} className="text-slate-600 hover:text-slate-900">
         ▾ Recent
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[min(28rem,90vw)] bg-[#15151c] border border-white/10 rounded-lg shadow-xl z-50">
-          <div className="px-3 py-2 border-b border-white/10 text-xs text-white/40 uppercase tracking-wide">
+        <div className="absolute right-0 top-full mt-2 w-[min(28rem,90vw)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="px-3 py-2 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wide font-semibold">
             Recent uploads
           </div>
           {items === null ? (
-            <div className="px-3 py-4 text-sm text-white/40">Loading…</div>
+            <div className="px-3 py-4 text-sm text-slate-500">Loading…</div>
           ) : error ? (
-            <div className="px-3 py-4 text-sm text-rose-300">{error}</div>
+            <div className="px-3 py-4 text-sm text-rose-600">{error}</div>
           ) : items.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-white/40">No previous uploads.</div>
+            <div className="px-3 py-4 text-sm text-slate-500">No previous uploads.</div>
           ) : (
             <ul className="max-h-[60vh] overflow-y-auto py-1">
               {items.map((j) => (
                 <li
                   key={j.id}
                   onClick={() => handlePick(j.id)}
-                  className={`group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/5 ${
-                    j.id === currentJobId ? 'bg-[#7C3AED]/15' : ''
+                  className={`group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 ${
+                    j.id === currentJobId ? 'bg-[#7C3AED]/10' : ''
                   }`}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white truncate">
+                    <div className="text-sm text-slate-900 truncate">
                       {j.filename || j.id}
                     </div>
-                    <div className="text-[11px] text-white/40 mt-0.5 flex items-center gap-2">
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
                       <StatusBadge status={j.status} />
                       <span>{j.num_segments} segs</span>
                       <span>·</span>
@@ -109,7 +109,7 @@ export default function RecentVideosMenu({ currentJobId, onPick, onDelete }) {
                   <button
                     onClick={(e) => handleDelete(e, j.id, j.filename)}
                     disabled={busyId === j.id}
-                    className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-rose-300 px-2 py-1 text-xs disabled:opacity-30"
+                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 px-2 py-1 text-xs disabled:opacity-30"
                     title="Delete this video + transcription"
                   >
                     ✕
@@ -126,12 +126,12 @@ export default function RecentVideosMenu({ currentJobId, onPick, onDelete }) {
 
 function StatusBadge({ status }) {
   const tone = {
-    ready: 'bg-emerald-500/20 text-emerald-200',
-    failed: 'bg-rose-500/20 text-rose-200',
-    extracting: 'bg-amber-500/20 text-amber-200',
-    transcribing: 'bg-amber-500/20 text-amber-200',
-    queued: 'bg-white/10 text-white/60',
-  }[status] || 'bg-white/10 text-white/60'
+    ready: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    failed: 'bg-rose-50 text-rose-700 border border-rose-200',
+    extracting: 'bg-amber-50 text-amber-700 border border-amber-200',
+    transcribing: 'bg-amber-50 text-amber-700 border border-amber-200',
+    queued: 'bg-slate-100 text-slate-600 border border-slate-200',
+  }[status] || 'bg-slate-100 text-slate-600 border border-slate-200'
   return (
     <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide ${tone}`}>
       {status || '?'}

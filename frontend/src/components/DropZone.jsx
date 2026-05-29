@@ -73,10 +73,10 @@ export default function DropZone({ onReady }) {
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-colors ${
-            dragging ? 'border-[#7C3AED] bg-[#7C3AED]/10' : 'border-white/20 hover:border-white/40'
+            dragging ? 'border-[#7C3AED] bg-[#7C3AED]/5' : 'border-slate-300 hover:border-slate-400 bg-slate-50'
           }`}
         >
-          <p className="text-white/70">
+          <p className="text-slate-700">
             {file ? `📹 ${file.name}` : 'Drop a .mp4 or .mov here, or click to browse'}
           </p>
           <input
@@ -89,18 +89,18 @@ export default function DropZone({ onReady }) {
         </div>
 
         <div className="flex items-center justify-center gap-3">
-          <label className="text-sm text-white/70">Language</label>
+          <label className="text-sm text-slate-700">Language</label>
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="bg-[#1a1a22] text-white rounded px-3 py-2 text-sm border border-white/10"
+            className="bg-white text-slate-900 rounded px-3 py-2 text-sm border border-slate-200"
           >
             {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="block text-xs text-white/50 mb-1 text-center">
+          <label className="block text-xs text-slate-500 mb-1 text-center">
             Context hint (optional) — improves accuracy on niche vocab
           </label>
           <input
@@ -109,12 +109,12 @@ export default function DropZone({ onReady }) {
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g. Hindi bhajan, devotional, classical lyrics"
             maxLength={224}
-            className="w-full bg-[#1a1a22] text-white rounded px-3 py-2 text-sm border border-white/10"
+            className="w-full bg-white text-slate-900 rounded px-3 py-2 text-sm border border-slate-200"
           />
         </div>
 
         <div>
-          <label className="block text-xs text-white/50 mb-1 text-center">
+          <label className="block text-xs text-slate-500 mb-1 text-center">
             Skip intro / aalaap — start transcription at (seconds)
           </label>
           <div className="flex items-center gap-3">
@@ -133,24 +133,24 @@ export default function DropZone({ onReady }) {
               step={0.5}
               value={startOffset}
               onChange={(e) => setStartOffset(Math.max(0, parseFloat(e.target.value) || 0))}
-              className="w-20 bg-[#1a1a22] text-white rounded px-2 py-1 text-sm border border-white/10 font-mono"
+              className="w-20 bg-white text-slate-900 rounded px-2 py-1 text-sm border border-slate-200 font-mono"
             />
-            <span className="text-xs text-white/40">s</span>
+            <span className="text-xs text-slate-500">s</span>
           </div>
         </div>
 
         {status && (
-          <div className={`text-xs rounded px-3 py-2 text-center ${
-            status.ok ? 'bg-emerald-500/20 text-emerald-200' : 'bg-rose-500/20 text-rose-200'
+          <div className={`text-xs rounded px-3 py-2 text-center border ${
+            status.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
           }`}>{status.msg}</div>
         )}
 
         {balance === 0 && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-100 text-sm px-4 py-3 text-center space-y-2">
+          <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm px-4 py-3 text-center space-y-2">
             <div>You're out of credits. Top up to keep transcribing.</div>
             <button
               onClick={() => navigate('/pricing')}
-              className="px-4 py-1.5 rounded-full bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-semibold"
+              className="px-4 py-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold"
             >
               See plans
             </button>
@@ -162,7 +162,7 @@ export default function DropZone({ onReady }) {
             disabled={busy || !file || balance === 0}
             onClick={handleGenerate}
             style={busy || !file || balance === 0 ? undefined : { background: GRADIENTS.horizontal }}
-            className="px-6 py-3 rounded-full shadow-md hover:shadow-lg transition-shadow text-white disabled:bg-white/10 disabled:text-white/40 font-semibold"
+            className="px-6 py-3 rounded-full shadow-md hover:shadow-lg transition-shadow text-white disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none font-semibold"
           >
             {busy ? 'Working…' : 'Generate Subtitles'}
           </button>
