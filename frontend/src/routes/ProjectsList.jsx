@@ -52,19 +52,11 @@ export default function ProjectsList() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Projects</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            {jobs.length === 0 ? 'No projects yet.' : `${jobs.length} project${jobs.length === 1 ? '' : 's'}`}
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/projects/new')}
-          style={{ background: GRADIENTS.horizontal }} className="px-4 py-2 rounded-full text-white shadow-md hover:shadow-lg transition-shadow font-semibold text-sm"
-        >
-          + New Project
-        </button>
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold tracking-tight">My Projects</h2>
+        <p className="text-xs text-slate-500 mt-1">
+          {jobs.length === 0 ? 'No projects yet.' : `${jobs.length} project${jobs.length === 1 ? '' : 's'}`}
+        </p>
       </div>
 
       {error && (
@@ -168,7 +160,7 @@ function EmptyState({ onCreate }) {
         style={{ background: GRADIENTS.horizontal }}
         className="px-6 py-3 rounded-full text-white shadow-md hover:shadow-lg transition-shadow font-semibold"
       >
-        Create your first project
+        Upload your first video
       </button>
     </div>
   )

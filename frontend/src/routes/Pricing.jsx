@@ -4,6 +4,8 @@ import { api } from '../lib/apiClient'
 import { loadRazorpaySDK } from '../lib/razorpay'
 import { useAuth } from '../hooks/useAuth'
 import { BRAND, GRADIENTS, LOGO, CTA } from '../lib/brand'
+import AppTopBar from '../components/AppTopBar'
+import AppFooter from '../components/AppFooter'
 
 /**
  * /pricing — public list of purchasable plans.
@@ -72,21 +74,23 @@ export default function Pricing() {
         </ul>
       )}
 
-      {user && (
-        <div className="mt-10 text-center">
-          <button
-            onClick={() => navigate('/projects')}
-            className="text-xs text-slate-500 hover:text-slate-900 underline underline-offset-2"
-          >
-            ← Back to projects
-          </button>
-        </div>
-      )}
     </div>
   )
 
-  // Authed: rendered inside App shell which already provides bg + nav.
-  if (authLoading || user) return content
+  // Authed: render with the same AppTopBar + AppFooter as every other
+  // authed page. /pricing is mounted globally (so logged-out visitors
+  // can also reach it) rather than nested inside App, so we have to
+  // bring the chrome in ourselves.
+  if (authLoading) return null
+  if (user) {
+    return (
+      <div className="min-h-screen flex flex-col bg-white text-slate-900">
+        <AppTopBar />
+        <div className="flex-1">{content}</div>
+        <AppFooter />
+      </div>
+    )
+  }
 
   // Logged-out: wrap in the public marketing chrome.
   return (
