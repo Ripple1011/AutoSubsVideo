@@ -106,7 +106,7 @@ function Hero() {
           </Link>
           <Link
             to="/pricing"
-            className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-slate-100 text-slate-800 font-semibold hover:bg-slate-200 transition-colors"
+            className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-emerald-100 text-emerald-800 font-semibold hover:bg-emerald-200 transition-colors"
           >
             See pricing
           </Link>

@@ -110,7 +110,7 @@ function PublicTopNav() {
           <img src={LOGO.full} alt={BRAND.name} className="h-14 w-auto" />
         </Link>
         <nav className="flex items-center gap-6 text-sm">
-          <Link to="/pricing" className="text-slate-600 hover:text-slate-900 font-medium">Pricing</Link>
+          <Link to="/" className="text-slate-600 hover:text-slate-900 font-medium">Home</Link>
           <Link
             to="/login"
             className="px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md hover:shadow-lg transition-shadow"
@@ -225,7 +225,7 @@ function PlanCard({ plan, navigate, authed }) {
   // Slice 6: app is light everywhere now, so the same card styles work for
   // both authed and logged-out contexts. `authed` only affects button
   // copy + behavior below (logged-out users bounce to /login on Buy).
-  const cardClass = 'rounded-2xl border border-slate-200 bg-white p-5 flex flex-col hover:border-slate-300 hover:shadow-md transition-all'
+  const cardClass = 'rounded-2xl border border-slate-200 bg-white p-5 flex flex-col shadow-xl hover:border-slate-300 hover:shadow-2xl transition-all'
   const cadenceClass = 'text-[#7C3AED]'
   const titleClass = 'text-lg font-semibold text-slate-900'
   const descClass = 'text-xs text-slate-500 mt-1 min-h-[2.5rem]'
@@ -258,6 +258,10 @@ function PlanCard({ plan, navigate, authed }) {
         )}
       </div>
 
+      {/* Flex spacer — absorbs any vertical-height difference between cards
+          so all Buy buttons in the row land on the same baseline. */}
+      <div className="flex-1" />
+
       <button
         disabled={(!plan.purchasable && authed) || buying}
         title={
@@ -268,6 +272,11 @@ function PlanCard({ plan, navigate, authed }) {
         onClick={handleBuy}
         style={(authed && !plan.purchasable) ? undefined : { background: GRADIENTS.horizontal }}
         className={
+          // `mt-5` gives a consistent breathing gap above the button. The
+          // card uses `flex flex-col` and we drop a `flex-1` spacer above
+          // this button so all Buy buttons land on the same baseline even
+          // when description / rollover note / cadence sub-line heights
+          // differ between plans.
           authed && !plan.purchasable
             ? 'mt-5 px-4 py-2 rounded-full font-semibold text-sm bg-slate-100 text-slate-400 cursor-not-allowed'
             : 'mt-5 px-4 py-2 rounded-full font-semibold text-sm shadow-md hover:shadow-lg transition-shadow text-white disabled:opacity-60'

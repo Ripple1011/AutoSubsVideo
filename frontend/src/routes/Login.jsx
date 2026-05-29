@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { BRAND, LOGO, CTA } from '../lib/brand'
+import { BRAND, COLORS, GRADIENTS, LOGO, CTA } from '../lib/brand'
 
 /**
  * Single "Continue with Google" button. Hits /auth/google/authorize to get
@@ -12,6 +12,11 @@ import { BRAND, LOGO, CTA } from '../lib/brand'
  *
  * If the user is already logged in, this route bounces them straight to
  * the destination they were trying to reach (or /projects).
+ *
+ * Layout mirrors the public chrome: same top nav and footer as the landing
+ * page, so a visitor mid-acquisition doesn't feel like they've left the
+ * site. The login card itself is a single shadowed surface centered in
+ * the available height — Google-style: one CTA, one decision, no clutter.
  */
 export default function Login() {
   const navigate = useNavigate()
@@ -47,51 +52,116 @@ export default function Login() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-white/40">Checking session…</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-6 text-center">
-        <div>
-          <Link to="/" className="inline-block bg-white rounded-2xl px-4 py-3 shadow-sm">
-            <img src={LOGO.full} alt={BRAND.name} className="h-10 w-auto" />
-          </Link>
-          <p className="text-sm text-white/60 mt-4">{BRAND.tagline}</p>
-        </div>
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 font-[Inter]">
+      <LoginTopNav />
 
-        <button
-          onClick={handleGoogle}
-          disabled={working}
-          className="w-full px-4 py-3 rounded-full bg-white text-[#0b0b0f] font-semibold hover:bg-white/90 disabled:bg-white/40 flex items-center justify-center gap-3"
-        >
-          <GoogleGlyph />
-          {working ? 'Redirecting to Google…' : CTA.signinSecondary}
-        </button>
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 sm:p-10">
+            <h1
+              className="text-2xl font-bold text-center tracking-tight"
+              style={{ color: COLORS.dark }}
+            >
+              Welcome back
+            </h1>
+            <p className="text-sm text-slate-500 text-center mt-2">
+              Sign in to keep your projects, credits, and exports in one place.
+            </p>
 
-        {error && (
-          <div className="text-xs rounded px-3 py-2 bg-rose-500/20 text-rose-200">
-            {error}
+            {loading ? (
+              <div className="mt-8 flex justify-center">
+                <p className="text-sm text-slate-400">Checking session…</p>
+              </div>
+            ) : (
+              <button
+                onClick={handleGoogle}
+                disabled={working}
+                className="mt-8 w-full px-4 py-3 rounded-full bg-white border border-slate-300 text-slate-800 font-semibold hover:bg-slate-50 hover:border-slate-400 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-sm transition-colors"
+              >
+                <GoogleGlyph />
+                {working ? 'Redirecting to Google…' : CTA.signinSecondary}
+              </button>
+            )}
+
+            {error && (
+              <div className="mt-4 text-xs rounded px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-200" />
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                What you get
+              </span>
+              <div className="flex-1 h-px bg-slate-200" />
+            </div>
+
+            <p
+              className="mt-5 text-sm text-center font-semibold"
+              style={{ color: COLORS.gradientTo }}
+            >
+              🪙 3 free videos on signup · no credit card required
+            </p>
+
+            <p className="mt-6 text-[11px] text-slate-400 text-center leading-relaxed">
+              By continuing you agree to our{' '}
+              <Link to="/terms" className="underline hover:text-slate-700">Terms</Link>{' '}
+              and{' '}
+              <Link to="/privacy" className="underline hover:text-slate-700">Privacy Policy</Link>.
+            </p>
           </div>
-        )}
+        </div>
+      </main>
 
-        <p className="text-[11px] text-white/40">
-          🪙 3 free videos on signup · no credit card required
-        </p>
-
-        <p className="text-[11px] text-white/30">
-          By continuing you agree to our{' '}
-          <Link to="/terms" className="underline hover:text-white/60">Terms</Link>{' '}
-          and{' '}
-          <Link to="/privacy" className="underline hover:text-white/60">Privacy Policy</Link>.
-        </p>
-      </div>
+      <LoginFooter />
     </div>
+  )
+}
+
+/**
+ * Top nav for the logged-out auth flow. Matches the landing page's TopNav
+ * but drops the "Sign in" button (we're already on it) and replaces it
+ * with a "← Back to home" link so users can bounce out of the funnel.
+ */
+function LoginTopNav() {
+  return (
+    <header className="border-b border-slate-200 bg-white">
+      <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+        <Link to="/" className="flex items-center" title={BRAND.name}>
+          <img src={LOGO.full} alt={BRAND.name} className="h-14 w-auto" />
+        </Link>
+        <nav className="flex items-center gap-6 text-sm">
+          <Link to="/pricing" className="text-slate-600 hover:text-slate-900 font-medium">
+            Pricing
+          </Link>
+          <Link to="/" className="text-slate-500 hover:text-slate-900 font-medium">
+            ← Home
+          </Link>
+        </nav>
+      </div>
+    </header>
+  )
+}
+
+/**
+ * Slim footer matching the public chrome on Landing and Pricing — Privacy /
+ * Terms / Support links + copyright. Keeping the surface consistent with the
+ * landing page so users don't feel like they've left the site.
+ */
+function LoginFooter() {
+  return (
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="max-w-6xl mx-auto px-6 py-4 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-3">
+        <div>© {BRAND.copyrightYear} {BRAND.name} · by {BRAND.parent}</div>
+        <div className="flex gap-4">
+          <Link to="/privacy" className="hover:text-slate-900">Privacy</Link>
+          <Link to="/terms" className="hover:text-slate-900">Terms</Link>
+          <a href={`mailto:${BRAND.supportEmail}`} className="hover:text-slate-900">Support</a>
+        </div>
+      </div>
+    </footer>
   )
 }
 
