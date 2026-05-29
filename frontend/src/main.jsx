@@ -10,30 +10,48 @@ import Login from './routes/Login.jsx'
 import Pricing from './routes/Pricing.jsx'
 import Account from './routes/Account.jsx'
 import AdminPlans from './routes/AdminPlans.jsx'
+import Landing from './routes/Landing.jsx'
+import Privacy from './routes/Privacy.jsx'
+import Terms from './routes/Terms.jsx'
 import RequireAuth from './components/RequireAuth.jsx'
 
 /**
- * Route layout (Slice 2 — auth):
- *   /login             → public (Google OAuth button)
- *   --- below require an active session ---
- *   /                  → redirect to /projects
- *   /projects          → grid
- *   /projects/new      → upload flow
- *   /projects/:id      → editor
- *   *                  → redirect to /projects
+ * Route layout (Slice 5a — brand + landing):
  *
- * RequireAuth wraps everything except /login: it probes /users/me; on 401
- * it bounces to /login carrying the originally-requested path so we land
- * back here after the Google round-trip.
+ *   PUBLIC (no auth required):
+ *     /            → Landing page (redirects to /projects if logged in)
+ *     /login       → Google OAuth button
+ *     /privacy     → privacy policy
+ *     /terms       → terms of service
+ *
+ *   AUTHED (RequireAuth gate):
+ *     /projects          → grid
+ *     /projects/new      → upload flow
+ *     /projects/:id      → editor
+ *     /pricing           → plan cards (also accessible logged out via the
+ *                          Landing pricing teaser linking here)
+ *     /account           → user dashboard
+ *     /admin/plans       → plan management (superuser only inside the route)
+ *     *                  → redirect to /projects
+ *
+ * Pricing is currently authed because it's wrapped inside App's shell (which
+ * shows the credit badge). The Landing page has its own teaser cards so
+ * logged-out users still get pricing info; the deep /pricing route is for
+ * users actively buying.
  */
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
+        {/* Public marketing + legal */}
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+
+        {/* Authed application */}
         <Route element={<RequireAuth />}>
           <Route element={<App />}>
-            <Route index element={<Navigate to="/projects" replace />} />
             <Route path="/projects" element={<ProjectsList />} />
             <Route path="/projects/new" element={<NewProject />} />
             <Route path="/projects/:id" element={<Workspace />} />

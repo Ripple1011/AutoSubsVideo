@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { BRAND, LOGO, CTA } from '../lib/brand'
 
 /**
  * Single "Continue with Google" button. Hits /auth/google/authorize to get
@@ -58,10 +59,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">AutoSub</h1>
-          <p className="text-sm text-white/50 mt-2">
-            Sign in to manage your subtitle projects.
-          </p>
+          <Link to="/" className="inline-block bg-white rounded-2xl px-4 py-3 shadow-sm">
+            <img src={LOGO.full} alt={BRAND.name} className="h-10 w-auto" />
+          </Link>
+          <p className="text-sm text-white/60 mt-4">{BRAND.tagline}</p>
         </div>
 
         <button
@@ -70,7 +71,7 @@ export default function Login() {
           className="w-full px-4 py-3 rounded-full bg-white text-[#0b0b0f] font-semibold hover:bg-white/90 disabled:bg-white/40 flex items-center justify-center gap-3"
         >
           <GoogleGlyph />
-          {working ? 'Redirecting to Google…' : 'Continue with Google'}
+          {working ? 'Redirecting to Google…' : CTA.signinSecondary}
         </button>
 
         {error && (
@@ -79,9 +80,15 @@ export default function Login() {
           </div>
         )}
 
+        <p className="text-[11px] text-white/40">
+          🪙 3 free videos on signup · no credit card required
+        </p>
+
         <p className="text-[11px] text-white/30">
-          We use Google sign-in to verify your email. We don't store passwords
-          and we don't post anything to your Google account.
+          By continuing you agree to our{' '}
+          <Link to="/terms" className="underline hover:text-white/60">Terms</Link>{' '}
+          and{' '}
+          <Link to="/privacy" className="underline hover:text-white/60">Privacy Policy</Link>.
         </p>
       </div>
     </div>

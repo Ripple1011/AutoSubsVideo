@@ -6,6 +6,7 @@ import ExportMenu from './components/ExportMenu'
 import CreditsBadge from './components/CreditsBadge'
 import { loadSavedStyle } from './lib/defaultStyle'
 import { useAuth } from './hooks/useAuth'
+import { BRAND, GRADIENTS, LOGO } from './lib/brand'
 
 /**
  * App shell. Persistent top bar + <Outlet/> for the active route. The
@@ -49,7 +50,16 @@ export default function App() {
   return (
     <div className="h-full w-full flex flex-col bg-[#0b0b0f] text-white">
       <header className="px-6 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
-        <Link to="/projects" className="text-lg font-semibold tracking-tight">AutoSub</Link>
+        <Link
+          to="/projects"
+          className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 shadow-sm hover:shadow-md transition-shadow"
+          title={BRAND.name}
+        >
+          {/* Wordmark is navy on white — sits on a white pill in the dark
+              app shell so the gradient V + wordmark stay legible. When a
+              dark-mode variant of the logo ships, drop the pill. */}
+          <img src={LOGO.full} alt={BRAND.name} className="h-7 w-auto" />
+        </Link>
         <div className="flex items-center gap-4 text-sm">
           <Link to="/projects/new" className="text-white/60 hover:text-white">
             ＋ New Video
@@ -73,7 +83,10 @@ export default function App() {
                 className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5"
                 title={user.email}
               >
-                <span className="w-7 h-7 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-semibold">
+                <span
+                  className="w-7 h-7 rounded-full text-white flex items-center justify-center text-xs font-semibold"
+                  style={{ background: GRADIENTS.horizontal }}
+                >
                   {(user.email || '?').charAt(0).toUpperCase()}
                 </span>
               </button>
