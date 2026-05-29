@@ -80,7 +80,7 @@ _CONJUNCTIONS_INDIC = {"और", "या", "लेकिन", "क्यों�
 # brevity cap, like font size or color. Applied AFTER all natural-boundary
 # rules (punctuation, conjunctions, adaptive gaps) and only to non-song
 # segments. Songs pass through untouched.
-_MAX_WORDS_PER_CHUNK = 3
+_MAX_WORDS_PER_CHUNK = 2
 
 # Gemini occasionally returns per-word timestamps that collapse into a tiny
 # window at the start of the audio (e.g., a 67-second song with every word
@@ -354,9 +354,9 @@ def _chunk_words_by_phrase_end(words: list[dict]) -> list[list[dict]]:
     words so a long line displays as multiple subtitles.
 
     Gemini marks `phrase_end=true` on the last word of each natural display
-    phrase (lyrical line). Inside each such line, we apply a balanced cap:
-    a 5-word line becomes 3+2 (not 5 at once); a 7-word line becomes 3+2+2
-    (not 3+3+1 — front-loaded balanced split avoids orphan tail words).
+    phrase (lyrical line). Inside each such line, we apply a balanced cap of
+    `_MAX_WORDS_PER_CHUNK` words per sub-chunk, front-loaded so any orphan
+    tail word sits in the FIRST sub-chunk rather than alone at the end.
     Falls back to adaptive gap detection if Gemini omitted phrase_end on
     every word (e.g., older model response).
     """

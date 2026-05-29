@@ -179,10 +179,25 @@ def burn_subtitles(
     ass_path.write_text(_build_ass(segments, style_schema), encoding="utf-8")
 
     ffmpeg = get_ffmpeg_exe()
+    # FFmpeg's lavfi filtergraph parser uses ':' as an option separator. On
+    # Windows a raw path like D:\foo\bar inside `ass=...:fontsdir=...` gets
+    # shredded because the drive-letter colon is read as a separator. Two
+    # layers of escaping are needed:
+    #   1. Forward-slash the path so backslashes don't act as escape chars.
+    #   2. Escape the drive colon (\:) AND wrap each option value in single
+    #      quotes — single quotes make libavfilter treat the value as one
+    #      opaque token, so even the escaped colon survives option parsing.
+    # Safe no-op on POSIX (no drive letter, no backslashes, quotes harmless).
+    def _ff_path(p) -> str:
+        s = str(p).replace("\\", "/")
+        if len(s) >= 2 and s[1] == ":":
+            s = s[0] + "\\:" + s[2:]
+        return f"'{s}'"
+
     cmd = [
         ffmpeg, "-y", "-loglevel", "error",
         "-i", video_path,
-        "-vf", f"ass={ass_path}:fontsdir={FONTS_DIR}",
+        "-vf", f"ass={_ff_path(ass_path)}:fontsdir={_ff_path(FONTS_DIR)}",
         "-c:a", "copy",
         str(out),
     ]
@@ -211,10 +226,12 @@ def _build_ass(segments: list[dict], style: dict) -> str:
     highlight_bgr = _hex_to_ass(style.get("highlightColor") or "#aa3bff")
 
     font_name = (style.get("font") or "Sans").replace(",", " ")
-    # Frontend uses fontSize: `${2 * scale}rem` over a 9:16 preview. Map the
-    # same multiplier onto a fixed reference size for the burn.
+    # Match the canvas: `2rem` (32px) text over a 9:16 preview that on a
+    # typical laptop renders ~720px tall → ~4.4% of preview height. Apply the
+    # same ratio to the burn's reference 1080px height → ~48 ASS units.
+    # libass then rescales to whatever the source video's real resolution is.
     scale = max(0.1, float(style.get("scale") or 1.0))
-    font_size = int(round(72 * scale))
+    font_size = int(round(42 * scale))
 
     align = _ASS_ALIGN.get(style.get("verticalAlignment"), 2)
     # BorderStyle 1: outline + shadow; 3: opaque box behind text (matches
@@ -288,9 +305,25 @@ def _build_ass(segments: list[dict], style: dict) -> str:
             # Speaker color (if any) is the BASE; karaokeColor is the ACTIVE
             # word's color. After the active span we revert to the base via
             # the speaker_override (or empty = Style's PrimaryColour).
+            seg_start = float(s["start"])
+            seg_end = float(s["end"])
             for i, w in enumerate(words):
-                w_start = _ass_time(float(w.get("start", s["start"])))
-                w_end = _ass_time(float(w.get("end", s["end"])))
+                # Span this word's Dialogue from where THIS word starts to
+                # where the NEXT word starts (or segment end for the last).
+                # Word end-times leave silence gaps between words (e.g.
+                # 2.13→2.38), which made the burn flicker — the subtitle
+                # would briefly vanish then reappear with a new highlight.
+                # Canvas doesn't have this issue because it always shows the
+                # parent segment and only swaps which word is highlighted.
+                # Start of the FIRST word is clamped to seg_start so the line
+                # appears as soon as the segment becomes active.
+                w_start_f = float(w.get("start", seg_start)) if i > 0 else seg_start
+                if i + 1 < len(words):
+                    w_end_f = float(words[i + 1].get("start", w.get("end", seg_end)))
+                else:
+                    w_end_f = seg_end
+                w_start = _ass_time(w_start_f)
+                w_end = _ass_time(w_end_f)
                 pieces: list[str] = [speaker_override]
                 for j, w2 in enumerate(words):
                     w_text = (w2.get("text") or "").strip()

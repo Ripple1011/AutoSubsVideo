@@ -41,20 +41,25 @@ export default function AppTopBar() {
 
   return (
     <header className="px-6 py-3 border-b border-slate-200 bg-white flex items-center justify-between flex-shrink-0">
-      <div className="flex items-center gap-6">
-        <Link to="/projects" className="flex items-center" title={BRAND.name}>
-          <img src={LOGO.full} alt={BRAND.name} className="h-12 w-auto block" />
+      <Link to="/projects" className="flex items-center" title={BRAND.name}>
+        <img src={LOGO.full} alt={BRAND.name} className="h-12 w-auto block" />
+      </Link>
+      <div className="flex items-center gap-5 text-sm">
+        <Link to="/projects" className="text-slate-600 hover:text-slate-900 font-medium">
+          My Projects
         </Link>
-        <nav className="flex items-center gap-5 text-sm">
-          <Link to="/projects" className="text-slate-600 hover:text-slate-900 font-medium">
-            My Projects
+        {/* Logged-in CTA: prompt to buy more credits (action-oriented).
+            Logged-out users see this through Pricing on the public chrome,
+            so we don't render anything here for the (rare) logged-out
+            visitor who somehow landed on an authed-only page. */}
+        {user && (
+          <Link
+            to="/pricing"
+            className="text-[#7C3AED] hover:text-[#6D28D9] font-semibold"
+          >
+            🪙 Buy credits
           </Link>
-          <Link to="/pricing" className="text-slate-600 hover:text-slate-900 font-medium">
-            Pricing
-          </Link>
-        </nav>
-      </div>
-      <div className="flex items-center gap-4 text-sm">
+        )}
         <Link
           to="/projects/new"
           style={{ background: GRADIENTS.horizontal }}
