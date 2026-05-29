@@ -52,13 +52,16 @@ export default function App() {
       <header className="px-6 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
         <Link
           to="/projects"
-          className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 shadow-sm hover:shadow-md transition-shadow"
+          className="flex items-center bg-white rounded-2xl px-4 py-2 shadow-lg shadow-white/5"
           title={BRAND.name}
         >
-          {/* Wordmark is navy on white — sits on a white pill in the dark
-              app shell so the gradient V + wordmark stay legible. When a
-              dark-mode variant of the logo ships, drop the pill. */}
-          <img src={LOGO.full} alt={BRAND.name} className="h-7 w-auto" />
+          {/* The logo PNG has a navy wordmark on transparent background.
+              On the dark app shell we need a white plate behind it for
+              legibility. The plate is sized generously (h-12 logo +
+              comfortable padding) so it reads as deliberate branding,
+              not a fallback. Drop this when a dark-mode variant of the
+              logo ships (wordmark in white, gradient V untouched). */}
+          <img src={LOGO.full} alt={BRAND.name} className="h-12 w-auto block" />
         </Link>
         <div className="flex items-center gap-4 text-sm">
           <Link to="/projects/new" className="text-white/60 hover:text-white">

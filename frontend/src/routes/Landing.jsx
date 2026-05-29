@@ -49,15 +49,19 @@ export default function Landing() {
 function TopNav() {
   return (
     <header className="border-b border-slate-200/70 bg-white/90 backdrop-blur sticky top-0 z-30">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3">
-          <img src={LOGO.full} alt={BRAND.name} className="h-9 w-auto" />
+          {/* Logo at 56px height -- substantial enough to read as a brand
+              mark, leaves room for the nav buttons to breathe. Sticky bar
+              uses h-20 (80px) container so the logo doesn't crowd the
+              border. */}
+          <img src={LOGO.full} alt={BRAND.name} className="h-14 w-auto" />
         </Link>
         <nav className="flex items-center gap-6 text-sm">
-          <Link to="/pricing" className="text-slate-600 hover:text-slate-900">Pricing</Link>
+          <Link to="/pricing" className="text-slate-600 hover:text-slate-900 font-medium">Pricing</Link>
           <Link
             to="/login"
-            className="px-4 py-2 rounded-full text-white font-semibold text-sm shadow-sm hover:shadow-md transition-shadow"
+            className="px-5 py-2.5 rounded-full text-white font-semibold text-sm shadow-md hover:shadow-lg transition-shadow"
             style={{ background: GRADIENTS.horizontal }}
           >
             Sign in
@@ -334,7 +338,7 @@ function Footer() {
     <footer className="border-t border-slate-200 bg-slate-50">
       <div className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-2 sm:grid-cols-4 gap-8 text-sm">
         <div className="col-span-2 sm:col-span-2">
-          <img src={LOGO.full} alt={BRAND.name} className="h-8 w-auto mb-3" />
+          <img src={LOGO.full} alt={BRAND.name} className="h-12 w-auto mb-3" />
           <p className="text-slate-500 max-w-sm">{BRAND.tagline}</p>
         </div>
         <div>

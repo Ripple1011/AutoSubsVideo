@@ -112,13 +112,13 @@ function Section({ title, children }) {
 function TopNav() {
   return (
     <header className="border-b border-slate-200/70 bg-white sticky top-0 z-30">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3">
-          <img src={LOGO.full} alt={BRAND.name} className="h-9 w-auto" />
+          <img src={LOGO.full} alt={BRAND.name} className="h-14 w-auto" />
         </Link>
         <nav className="flex items-center gap-6 text-sm">
-          <Link to="/pricing" className="text-slate-600 hover:text-slate-900">Pricing</Link>
-          <Link to="/login" className="text-slate-600 hover:text-slate-900">Sign in</Link>
+          <Link to="/pricing" className="text-slate-600 hover:text-slate-900 font-medium">Pricing</Link>
+          <Link to="/login" className="text-slate-600 hover:text-slate-900 font-medium">Sign in</Link>
         </nav>
       </div>
     </header>

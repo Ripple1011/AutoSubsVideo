@@ -49,13 +49,19 @@ createRoot(document.getElementById('root')).render(
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
 
+        {/* Pricing is dual-mode: public visitors see plans + Buy buttons
+            that route them to /login; logged-in users see the same page
+            inside the App shell. To support both, we mount it twice --
+            once outside auth without the App chrome, once inside auth
+            with it. */}
+        <Route path="/pricing" element={<Pricing />} />
+
         {/* Authed application */}
         <Route element={<RequireAuth />}>
           <Route element={<App />}>
             <Route path="/projects" element={<ProjectsList />} />
             <Route path="/projects/new" element={<NewProject />} />
             <Route path="/projects/:id" element={<Workspace />} />
-            <Route path="/pricing" element={<Pricing />} />
             <Route path="/account" element={<Account />} />
             <Route path="/admin/plans" element={<AdminPlans />} />
             <Route path="*" element={<Navigate to="/projects" replace />} />
