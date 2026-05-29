@@ -5,6 +5,123 @@ Both AI agents update this file at end of session. Read before starting.
 
 ---
 
+## 2026-05-29 (morning) · Windows agent — Slice 4: VPS production deploy on vaacha.app + HTTPS
+
+**🎉 AutoSub is live at https://vaacha.app**
+
+**Landed:**
+- Domain: `vaacha.app` (Porkbun, $10.81 first year / $14.93 renewal).
+- DNS: A records for `vaacha.app` and `www.vaacha.app` → `187.124.151.114`.
+  Propagated globally; verified from laptop pre-deploy.
+- VPS pulled 5 commits worth of work (Slice 1 routes through Slice 3b
+  Razorpay) into the existing `/root/autosub/`.
+- nginx vhost at `/etc/nginx/sites-available/vaacha.app` listening on
+  `:80` (HTTP) and `:443` (HTTPS):
+  - Proxies `/api/`, `/auth/`, `/users/` to backend on `127.0.0.1:8001`.
+  - SPA fallback `try_files $uri $uri/ /index.html` for client routes.
+  - Coexists with the existing `creditcard` vhost (server_name `_;`
+    wildcard catches the raw-IP path; explicit `vaacha.app` server_name
+    wins for our domain).
+- Let's Encrypt cert via certbot (snap install). Cert at
+  `/etc/letsencrypt/live/vaacha.app/`. Auto-renewal scheduled.
+  Certificate expires 2026-08-27.
+- HTTP → HTTPS 301 redirect (certbot added automatically — they
+  removed the prompt in recent versions; redirect is the new default).
+- VPS `backend/.env` updated:
+  - `OAUTH_CALLBACK_BASE=https://vaacha.app`
+  - `OAUTH_SUCCESS_REDIRECT=https://vaacha.app/projects`
+  - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` pasted from
+    laptop .env.
+  - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` pasted (test mode).
+  - `SHARED_PASSWORD=` (emptied; the gate retired because real auth is
+    live and was redundant defense).
+  - `JWT_SECRET` auto-generated on first boot, persisted to .env by
+    the backend.
+- Google Cloud Console OAuth client updated:
+  - Authorized JS origin: `https://vaacha.app` (kept localhost too).
+  - Authorized redirect URI: `https://vaacha.app/auth/google/callback`.
+- Promoted `rmacloen@gmail.com` to superuser on VPS DB (separate
+  users.db from local). Granted 1000-credit dev allotment so admin
+  testing doesn't burn budget.
+- Backfilled thumbnails for existing pre-Slice-1 jobs so the Projects
+  card grid renders with images instead of status badges.
+
+**Bugs hit + fixed during deploy:**
+
+1. **`python-multipart==0.0.18` pinned in requirements.txt** clashes
+   with `fastapi-users==14.0.1` which needs `==0.0.20`. Local pip
+   silently upgrades, VPS pip is strict and refused. Fixed on VPS by
+   sed edit; bumping the pin to `==0.0.20` in this commit so future
+   deploys don't repeat the dance.
+
+2. **OAuth callback returned the SPA, not the backend.** Original
+   nginx vhost only proxied `/api/` to the backend. Google redirects
+   users back to `/auth/google/callback` (no `/api` prefix because
+   that's what `oauth_callback_base` produces and what's whitelisted
+   in Google Console). Result: callback served `index.html`, React
+   Router didn't match the path, redirected to `/login`, OAuth code
+   silently dropped. Fixed by adding `location /auth/` and
+   `location /users/` proxy blocks (without trailing slash on
+   proxy_pass so the full path is preserved). `deploy/nginx.conf`
+   template updated in this commit so fresh deploys work first time.
+
+3. **IPv4-only `vaacha.app` resolution from a specific ISP path was
+   slow.** Hostinger's nginx is reachable; user's ISP (Jio?) was
+   routing the request through a slow IPv6 NAT64 gateway. Browser
+   gave up before TCP handshake completed. Once we moved to HTTPS,
+   the path settled and the browser worked normally. Worth knowing
+   for support tickets later — symptoms are "site can't be reached"
+   on the first visit, fine after a refresh.
+
+4. **systemd service was running 5-day-old code after the git pull.**
+   `git pull` updates files on disk but doesn't restart the
+   process. Without `systemctl restart autosub`, the live service
+   was the pre-pull binary. Lesson: `update.sh` should always
+   restart the service after rebuilding; verify in repo.
+
+**Verified end-to-end (live on https://vaacha.app):**
+- Google login lands on `/projects` with credit badge populated.
+- Upload `.mp4` → credit decrements 1003 → 1002.
+- Sync Pack-10 to Razorpay → Pricing card flips from "Coming soon"
+  to "Buy now."
+- Existing projects load with thumbnails after backfill.
+- HTTPS active; HTTP redirects.
+
+**What's still NOT done:**
+- Razorpay account activation (₹199 fee + KYC; deferred until the
+  real business entity is incorporated). Code is end-to-end ready;
+  just needs the live keys when activation clears.
+- Razorpay subscription tiers (Monthly / Annual) -- only one-time
+  packs are wired right now. `POST /checkout/{slug}` returns 501
+  for subscriptions.
+- Razorpay webhook handler. Will land at `POST /razorpay/webhook`
+  once we have HTTPS (which we do now) AND the live entity account.
+- Update.sh on VPS doesn't bump python-multipart automatically;
+  with this commit's pin change, the next `update.sh` will sort
+  itself out via the standard `pip install -r requirements.txt`.
+
+**Repository fixes in THIS commit:**
+- `backend/requirements.txt`: python-multipart pin 0.0.18 → 0.0.20.
+- `deploy/nginx.conf`: added `/auth/` and `/users/` proxy blocks so
+  the OAuth callback reaches the backend instead of returning the
+  SPA. Comments explain why proxy_pass has no trailing slash here
+  (preserve full path) vs the trailing slash on `/api/` (strip prefix).
+
+**For the Mac agent (next session):**
+- Production URL is `https://vaacha.app`.
+- Local dev still works unchanged; the new `.env` additions are
+  optional locally (OAUTH_CALLBACK_BASE / OAUTH_SUCCESS_REDIRECT
+  default to localhost values in config.py).
+- VPS deploys via `ssh root@187.124.151.114 '/root/autosub/deploy/update.sh'`
+  pull, rebuild, restart in one shot.
+- VPS `users.db` is independent from local `users.db`. If you sign
+  up via Google on vaacha.app you'll be a fresh user (no superuser),
+  not the same one you are locally. Promote yourself by re-running
+  the script from the 2026-05-28 (night) HANDOFF entry against the
+  VPS DB.
+
+---
+
 ## 2026-05-28 (late night, ~02:00) · Windows agent — Slice 3b-continued: Razorpay integration (code complete, blocked on entity KYC)
 
 **Landed:**

@@ -4,7 +4,7 @@
 # --- Web framework -------------------------------------------------------
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
-python-multipart==0.0.18          # required by FastAPI for UploadFile
+python-multipart==0.0.20          # required by FastAPI for UploadFile (and fastapi-users)
 
 # --- Config / validation -------------------------------------------------
 pydantic==2.10.3
