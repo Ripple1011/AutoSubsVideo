@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, jobThumbUrl } from '../lib/apiClient'
+import { GRADIENTS } from '../lib/brand'
 
 /**
  * Full-page grid of past jobs. Lives at /projects.
@@ -60,7 +61,7 @@ export default function ProjectsList() {
         </div>
         <button
           onClick={() => navigate('/projects/new')}
-          className="px-4 py-2 rounded-full bg-purple-500 hover:bg-purple-400 font-semibold text-sm"
+          style={{ background: GRADIENTS.horizontal }} className="px-4 py-2 rounded-full text-white shadow-md hover:shadow-lg transition-shadow font-semibold text-sm"
         >
           + New Project
         </button>
@@ -164,7 +165,8 @@ function EmptyState({ onCreate }) {
       <p className="text-white/70 mb-4">No projects yet.</p>
       <button
         onClick={onCreate}
-        className="px-6 py-3 rounded-full bg-purple-500 hover:bg-purple-400 font-semibold"
+        style={{ background: GRADIENTS.horizontal }}
+        className="px-6 py-3 rounded-full text-white shadow-md hover:shadow-lg transition-shadow font-semibold"
       >
         Create your first project
       </button>

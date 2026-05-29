@@ -22,7 +22,7 @@ export default function CreditsBadge() {
     <span
       title={`${balance} credit${balance === 1 ? '' : 's'} remaining`}
       className={`px-3 py-1 rounded-full text-xs font-mono font-semibold ${
-        low ? 'bg-rose-500/20 text-rose-200' : 'bg-purple-500/20 text-purple-200'
+        low ? 'bg-rose-500/20 text-rose-200' : 'bg-[#7C3AED]/20 text-[#c4b5fd]'
       }`}
     >
       🪙 {balance}

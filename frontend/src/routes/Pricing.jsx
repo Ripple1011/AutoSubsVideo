@@ -223,7 +223,7 @@ function PlanCard({ plan, navigate, authed }) {
   const cardClass = authed
     ? 'rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col'
     : 'rounded-2xl border border-slate-200 bg-white p-5 flex flex-col hover:border-slate-300 transition-colors'
-  const cadenceClass = authed ? 'text-purple-400' : 'text-purple-600'
+  const cadenceClass = authed ? 'text-[#a78bfa]' : 'text-[#7C3AED]'
   const titleClass = authed ? 'text-lg font-semibold text-white' : 'text-lg font-semibold text-slate-900'
   const descClass = authed ? 'text-xs text-white/50 mt-1 min-h-[2.5rem]' : 'text-xs text-slate-500 mt-1 min-h-[2.5rem]'
   const priceClass = authed ? 'text-3xl font-bold text-white' : 'text-3xl font-bold text-slate-900'
@@ -267,7 +267,7 @@ function PlanCard({ plan, navigate, authed }) {
           authed
             ? `mt-5 px-4 py-2 rounded-full font-semibold text-sm transition-colors ${
                 plan.purchasable
-                  ? 'bg-purple-500 hover:bg-purple-400 text-white disabled:opacity-60'
+                  ? 'bg-[#7C3AED] hover:bg-[#6D28D9] text-white disabled:opacity-60'
                   : 'bg-white/5 text-white/30 cursor-not-allowed'
               }`
             : 'mt-5 px-4 py-2 rounded-full font-semibold text-sm transition-shadow shadow-md hover:shadow-lg text-white'

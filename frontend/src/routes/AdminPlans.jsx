@@ -270,7 +270,7 @@ function PlanRow({ plan, onSaved }) {
           <button
             onClick={save}
             disabled={!dirty || saving}
-            className="text-xs px-3 py-1 rounded bg-purple-500 hover:bg-purple-400 disabled:bg-white/10 disabled:text-white/40 font-semibold"
+            className="text-xs px-3 py-1 rounded bg-[#7C3AED] hover:bg-[#6D28D9] disabled:bg-white/10 disabled:text-white/40 font-semibold"
           >
             {saving ? '…' : 'Save'}
           </button>

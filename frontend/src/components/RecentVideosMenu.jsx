@@ -86,7 +86,7 @@ export default function RecentVideosMenu({ currentJobId, onPick, onDelete }) {
                   key={j.id}
                   onClick={() => handlePick(j.id)}
                   className={`group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/5 ${
-                    j.id === currentJobId ? 'bg-purple-500/10' : ''
+                    j.id === currentJobId ? 'bg-[#7C3AED]/15' : ''
                   }`}
                 >
                   <div className="flex-1 min-w-0">

@@ -81,7 +81,11 @@ export default function SubtitleSidebar({ segments, originalSegments, activeInde
         return (
           <li
             key={i}
-            className={`p-3 cursor-pointer border-l-[3px] ${i === activeIndex ? 'bg-white/10' : 'hover:bg-white/5'}`}
+            className={`p-3 cursor-pointer border-l-[3px] transition-colors ${
+              i === activeIndex
+                ? 'bg-gradient-to-r from-[#7C3AED]/15 via-white/[0.04] to-transparent'
+                : 'hover:bg-white/5'
+            }`}
             style={{ borderLeftColor: stripeColor }}
             onClick={() => onSelect(i)}
           >

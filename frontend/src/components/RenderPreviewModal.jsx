@@ -72,7 +72,7 @@ export default function RenderPreviewModal({ open, videoUrl, filename, onDownloa
           <button
             onClick={onDownload}
             disabled={!videoUrl}
-            className="px-4 py-2 text-sm rounded bg-purple-500 hover:bg-purple-400 disabled:opacity-40 text-white font-medium"
+            className="px-4 py-2 text-sm rounded bg-[#7C3AED] hover:bg-[#6D28D9] disabled:opacity-40 text-white font-medium"
           >
             ↓ Download
           </button>

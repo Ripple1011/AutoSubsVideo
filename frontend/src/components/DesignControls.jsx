@@ -85,7 +85,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
                 className={`
                   flex items-center justify-center px-2 py-2 rounded transition-all
                   ${isActive
-                    ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-[#0b0b0f]'
+                    ? 'ring-2 ring-[#7C3AED] ring-offset-2 ring-offset-[#0b0b0f]'
                     : 'hover:bg-white/5 ring-1 ring-white/10'}
                 `}
                 style={{
@@ -174,7 +174,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
                 key={b.label}
                 onClick={() => set('highlightTransparent', b.val)}
                 className={`px-3 py-1 rounded text-xs ${
-                  Boolean(value.highlightTransparent) === b.val ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                  Boolean(value.highlightTransparent) === b.val ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
                 }`}
               >
                 {b.label}
@@ -210,7 +210,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
                     onClick={() => set('karaokeEnabled', b.val)}
                     title={disableTitle}
                     className={`px-3 py-1 rounded text-xs disabled:opacity-30 disabled:cursor-not-allowed ${
-                      Boolean(value.karaokeEnabled) === b.val ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                      Boolean(value.karaokeEnabled) === b.val ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
                     }`}
                   >
                     {b.label}
@@ -255,7 +255,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
               key={a}
               onClick={() => set('verticalAlignment', a)}
               className={`px-3 py-1 rounded text-xs capitalize ${
-                value.verticalAlignment === a ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                value.verticalAlignment === a ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
               }`}
             >
               {a}
@@ -272,7 +272,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
               key={a.value}
               onClick={() => set('animation', a.value)}
               className={`px-3 py-1 rounded text-xs ${
-                value.animation === a.value ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                value.animation === a.value ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
               }`}
             >
               {a.label}
@@ -290,7 +290,7 @@ export default function DesignControls({ value, onChange, segments = [] }) {
               disabled={!value.animation || value.animation === 'none'}
               onClick={() => set('animationSpeed', s)}
               className={`px-3 py-1 rounded text-xs capitalize disabled:opacity-30 ${
-                value.animationSpeed === s ? 'bg-purple-500' : 'bg-white/5 hover:bg-white/10'
+                value.animationSpeed === s ? 'bg-[#7C3AED]' : 'bg-white/5 hover:bg-white/10'
               }`}
             >
               {s}

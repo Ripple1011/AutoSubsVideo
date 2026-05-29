@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { uploadFile, api } from '../lib/apiClient'
 import { useCredits } from '../hooks/useCredits'
+import { GRADIENTS } from '../lib/brand'
 
 const LANGUAGES = [
   { value: 'auto', label: 'Auto-Detect' },
@@ -72,7 +73,7 @@ export default function DropZone({ onReady }) {
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-colors ${
-            dragging ? 'border-purple-400 bg-purple-500/10' : 'border-white/20 hover:border-white/40'
+            dragging ? 'border-[#7C3AED] bg-[#7C3AED]/10' : 'border-white/20 hover:border-white/40'
           }`}
         >
           <p className="text-white/70">
@@ -160,7 +161,8 @@ export default function DropZone({ onReady }) {
           <button
             disabled={busy || !file || balance === 0}
             onClick={handleGenerate}
-            className="px-6 py-3 rounded-full bg-purple-500 hover:bg-purple-400 disabled:bg-white/10 disabled:text-white/40 font-semibold"
+            style={busy || !file || balance === 0 ? undefined : { background: GRADIENTS.horizontal }}
+            className="px-6 py-3 rounded-full shadow-md hover:shadow-lg transition-shadow text-white disabled:bg-white/10 disabled:text-white/40 font-semibold"
           >
             {busy ? 'Working…' : 'Generate Subtitles'}
           </button>

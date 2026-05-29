@@ -64,7 +64,11 @@ export default function App() {
           <img src={LOGO.full} alt={BRAND.name} className="h-12 w-auto block" />
         </Link>
         <div className="flex items-center gap-4 text-sm">
-          <Link to="/projects/new" className="text-white/60 hover:text-white">
+          <Link
+            to="/projects/new"
+            style={{ background: GRADIENTS.horizontal }}
+            className="px-4 py-1.5 rounded-full text-white text-sm font-semibold shadow-md hover:shadow-lg transition-shadow"
+          >
             ＋ New Video
           </Link>
           {workspaceId && (
@@ -113,7 +117,7 @@ export default function App() {
                   {user.is_superuser && (
                     <button
                       onClick={() => { setUserMenuOpen(false); navigate('/admin/plans') }}
-                      className="block w-full text-left px-3 py-2 text-sm text-purple-300 hover:bg-white/5 border-t border-white/10"
+                      className="block w-full text-left px-3 py-2 text-sm text-[#a78bfa] hover:bg-white/5 border-t border-white/10"
                     >
                       Manage plans (admin)
                     </button>

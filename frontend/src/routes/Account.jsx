@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useCredits } from '../hooks/useCredits'
+import { GRADIENTS } from '../lib/brand'
 
 const SOURCE_LABEL = {
   signup_bonus: 'Signup bonus',
@@ -61,7 +62,8 @@ export default function Account() {
           </div>
           <button
             onClick={() => navigate('/pricing')}
-            className="px-4 py-2 rounded-full bg-purple-500 hover:bg-purple-400 font-semibold text-sm"
+            style={{ background: GRADIENTS.horizontal }}
+            className="px-4 py-2 rounded-full shadow-md hover:shadow-lg transition-shadow text-white font-semibold text-sm"
           >
             Get more
           </button>

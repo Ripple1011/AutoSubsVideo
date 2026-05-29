@@ -152,7 +152,7 @@ export default function SettingsModal({ open, onClose }) {
               <button onClick={handleClear} className="px-4 py-2 rounded bg-white/5 hover:bg-white/10 text-sm">
                 Clear
               </button>
-              <button onClick={handleSave} className="flex-1 px-4 py-2 rounded bg-purple-500 hover:bg-purple-400 text-sm font-semibold">
+              <button onClick={handleSave} className="flex-1 px-4 py-2 rounded bg-[#7C3AED] hover:bg-[#6D28D9] text-sm font-semibold">
                 Save
               </button>
             </div>
