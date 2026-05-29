@@ -1,8 +1,9 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
+import { initAnalytics, pageview } from './lib/analytics'
 import ProjectsList from './routes/ProjectsList.jsx'
 import NewProject from './routes/NewProject.jsx'
 import Workspace from './routes/Workspace.jsx'
@@ -39,9 +40,29 @@ import RequireAuth from './components/RequireAuth.jsx'
  * logged-out users still get pricing info; the deep /pricing route is for
  * users actively buying.
  */
+// Fire PostHog init once at module load. It's a no-op in dev unless the
+// VITE_POSTHOG_DEV=1 flag is set, so local hot-reloads don't pollute the
+// production funnel.
+initAnalytics()
+
+/**
+ * SPA route-change pageviews. PostHog autocapture for SPAs is unreliable
+ * because there's no real navigation -- the URL changes but the page
+ * doesn't reload. Wire it manually off useLocation so each /pricing,
+ * /login, /projects/:id etc registers as a distinct page.
+ */
+function AnalyticsListener() {
+  const location = useLocation()
+  useEffect(() => {
+    pageview(location.pathname + location.search)
+  }, [location.pathname, location.search])
+  return null
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
+      <AnalyticsListener />
       <Routes>
         {/* Public marketing + legal */}
         <Route path="/" element={<Landing />} />

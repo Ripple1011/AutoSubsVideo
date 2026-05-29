@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'
 import { BRAND, GRADIENTS, LOGO, CTA } from '../lib/brand'
 import AppTopBar from '../components/AppTopBar'
 import AppFooter from '../components/AppFooter'
+import { track } from '../lib/analytics'
 
 /**
  * /pricing — public list of purchasable plans.
@@ -153,11 +154,14 @@ function PlanCard({ plan, navigate, authed }) {
   // Logged-out users can't actually buy — bounce them to /login on click.
   // We don't want to silently open Razorpay Checkout against an unauth
   // session because /checkout/{slug} would 401 anyway.
-  const handleBuy = authed ? handleBuyAuthed : () => navigate('/login')
+  const handleBuy = authed
+    ? handleBuyAuthed
+    : () => { track('buy_clicked_logged_out', { slug: plan.slug }); navigate('/login') }
 
   async function handleBuyAuthed() {
     setBuying(true)
     setError(null)
+    track('buy_clicked', { slug: plan.slug, cadence: plan.cadence, price_inr: plan.price_inr })
     try {
       // 1. Backend creates a Razorpay Order (one-time) or Subscription.
       const cfg = await api(`/checkout/${plan.slug}`, { method: 'POST' })
@@ -200,6 +204,7 @@ function PlanCard({ plan, navigate, authed }) {
             })
             // Refresh the credits badge across the app, then go to Account.
             try { window.dispatchEvent(new Event('autosub:credits-refresh')) } catch {}
+            track('purchase_completed', { slug: plan.slug, cadence: plan.cadence, price_inr: plan.price_inr })
             navigate('/account')
             // Tiny console log so devs can confirm balance updated.
             console.log('[razorpay] credited', verified)
@@ -212,6 +217,7 @@ function PlanCard({ plan, navigate, authed }) {
       }
       const rzp = new window.Razorpay(options)
       rzp.on('payment.failed', (resp) => {
+        track('purchase_failed', { slug: plan.slug, reason: resp.error?.description })
         setError(`Payment failed: ${resp.error?.description || 'unknown error'}`)
         setBuying(false)
       })

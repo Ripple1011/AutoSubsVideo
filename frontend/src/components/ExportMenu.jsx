@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import RenderPreviewModal from './RenderPreviewModal'
+import { track } from '../lib/analytics'
 
 /**
  * Header dropdown offering SRT / VTT sidecar downloads plus a burned-in
@@ -40,6 +41,7 @@ export default function ExportMenu({ jobId, styleSchema }) {
   const handleBurn = async () => {
     setBurning(true)
     setError(null)
+    track('export_burn_started', { job_id: jobId })
     try {
       const res = await fetch(`/api/export/hard?job_id=${encodeURIComponent(jobId)}`, {
         method: 'POST',
@@ -58,8 +60,10 @@ export default function ExportMenu({ jobId, styleSchema }) {
       if (preview?.url) URL.revokeObjectURL(preview.url)
       const url = URL.createObjectURL(blob)
       setPreview({ url, filename })
+      track('export_burn_succeeded', { job_id: jobId })
       setOpen(false)
     } catch (e) {
+      track('export_burn_failed', { job_id: jobId, error: e.message })
       setError(e.message)
     } finally {
       setBurning(false)
@@ -95,7 +99,7 @@ export default function ExportMenu({ jobId, styleSchema }) {
             <a
               key={opt.fmt}
               href={linkFor(opt.fmt)}
-              onClick={() => setOpen(false)}
+              onClick={() => { track('export_soft', { job_id: jobId, fmt: opt.fmt }); setOpen(false) }}
               className="block px-3 py-2 hover:bg-slate-50 text-sm"
             >
               <div className="text-slate-900">{opt.label}</div>

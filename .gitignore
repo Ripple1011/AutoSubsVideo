@@ -9,6 +9,12 @@ backend/.env.txt
 .env.local
 .env.*.local
 
+# Frontend build-time env. ONLY public, write-only keys belong here (PostHog
+# project key, etc.). Vite inlines these into the client bundle at build,
+# so anything sensitive (Razorpay secret, etc.) MUST stay in backend/.env.
+!frontend/.env.production
+!frontend/.env.example
+
 # --- Python -----------------------------------------------------------------
 __pycache__/
 *.py[cod]

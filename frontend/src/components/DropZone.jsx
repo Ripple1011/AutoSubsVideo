@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { uploadFile, api } from '../lib/apiClient'
 import { useCredits } from '../hooks/useCredits'
 import { GRADIENTS } from '../lib/brand'
+import { track } from '../lib/analytics'
 
 const LANGUAGES = [
   { value: 'auto', label: 'Auto-Detect' },
@@ -46,6 +47,7 @@ export default function DropZone({ onReady }) {
       return
     }
     setBusy(true); setStatus({ ok: true, msg: 'Uploading…' })
+    track('upload_started', { language, size_mb: Math.round(file.size / 1024 / 1024) })
     try {
       const { job_id } = await uploadFile(file, language, prompt, startOffset)
       // Backend consumed a credit (managed flow). Refresh the badge.
@@ -54,8 +56,10 @@ export default function DropZone({ onReady }) {
 
       const job = await pollJob(job_id)
       const objectUrl = URL.createObjectURL(file)
+      track('transcribe_ready', { job_id, language: job.language })
       onReady({ videoUrl: objectUrl, segments: job.segments, jobId: job_id })
     } catch (e) {
+      track('upload_failed', { error: e.message })
       setStatus({ ok: false, msg: e.message })
       // Refresh in case the credit was refunded server-side after a 4xx/5xx.
       refreshCredits()

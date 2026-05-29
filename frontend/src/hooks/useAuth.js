@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { identify, reset } from '../lib/analytics'
 
 /**
  * Auth state hook. Backend identifies the user via httpOnly cookie set by
@@ -22,6 +23,10 @@ export function useAuth() {
       if (res.ok) {
         const me = await res.json()
         setUser(me)
+        // Tie this browser to a stable user_id so PostHog funnels can
+        // follow the same person across sessions / devices. Idempotent --
+        // calling identify with the same id is a no-op after the first time.
+        identify(me.id, { email: me.email })
         // Best-effort one-shot: claim any legacy (pre-auth) jobs. Server
         // returns 0 except for the very first user; rest of the time this
         // is a cheap no-op. Failure is silent — auth UX shouldn't break
@@ -45,6 +50,9 @@ export function useAuth() {
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     } catch { /* swallow — we clear local state regardless */ }
+    // Drop the analytics identity too so the next signup on this browser
+    // doesn't get merged into the previous user's funnel.
+    reset()
     setUser(null)
   }, [])
 

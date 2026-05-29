@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { BRAND, COLORS, GRADIENTS, LOGO, CTA } from '../lib/brand'
+import { track } from '../lib/analytics'
 
 /**
  * Single "Continue with Google" button. Hits /auth/google/authorize to get
@@ -35,6 +36,7 @@ export default function Login() {
   const handleGoogle = async () => {
     setWorking(true)
     setError(null)
+    track('login_google_clicked')
     try {
       const res = await fetch('/api/auth/google/authorize', { credentials: 'include' })
       if (!res.ok) {
