@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../lib/apiClient'
@@ -122,83 +122,74 @@ function Hero() {
 }
 
 /**
- * Animated 9:16 phone-frame mockup of the subtitle output. Pure CSS —
- * no real video, no recording dependency. Subtitles cycle through three
- * lines: English, Hindi, Gujarati. Each line fades in, holds, fades out.
+ * 9:16 phone-frame demo. Real burned video — `public/hero-demo.mp4` is
+ * a Vaacha export looped in the hero slot. Keeps the same 280x500 frame
+ * as the original CSS mockup so the surrounding layout is unchanged.
  *
- * Goal is to communicate "this is what your reel will look like" without
- * the bandwidth + maintenance cost of an actual demo video.
+ * Autoplay+muted+playsInline are the trio required for autoplay on iOS
+ * Safari and to satisfy Chrome's muted-autoplay-only policy. A tap on
+ * the speaker icon unmutes — that interaction satisfies the browser
+ * autoplay-with-audio rule from then on.
  */
 function HeroDemo() {
-  const LINES = [
-    { text: 'Welcome to my channel!', lang: 'English' },
-    { text: 'मेरे चैनल में स्वागत है!', lang: 'Hindi', fontFamily: '"Baloo 2", "Noto Sans Devanagari", sans-serif' },
-    { text: 'મારી ચેનલમાં તમારું સ્વાગત છે!', lang: 'Gujarati', fontFamily: '"Mukta Vaani", "Noto Sans Gujarati", sans-serif' },
-  ]
-  const [idx, setIdx] = useState(0)
+  const videoRef = useRef(null)
+  const [muted, setMuted] = useState(true)
+  const [playing, setPlaying] = useState(true)
 
-  useEffect(() => {
-    const t = setInterval(() => setIdx((i) => (i + 1) % LINES.length), 2500)
-    return () => clearInterval(t)
-  }, [])
+  const toggleMute = () => {
+    const v = videoRef.current
+    if (!v) return
+    const next = !v.muted
+    v.muted = next
+    setMuted(next)
+    if (!next) v.play().catch(() => {})
+  }
 
-  const line = LINES[idx]
+  const togglePlay = () => {
+    const v = videoRef.current
+    if (!v) return
+    if (v.paused) {
+      v.play().catch(() => {})
+    } else {
+      v.pause()
+    }
+  }
 
   return (
     <div className="flex items-center justify-center">
       <div
-        className="relative rounded-[2.2rem] overflow-hidden shadow-2xl"
-        style={{
-          width: 280,
-          height: 500,
-          background: 'linear-gradient(160deg, #0b1a33 0%, #1e293b 60%, #334155 100%)',
-        }}
+        className="relative rounded-[2.2rem] overflow-hidden shadow-2xl bg-black"
+        style={{ width: 280, height: 500 }}
       >
-        {/* Phone notch */}
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-5 rounded-full bg-black/80 z-10" />
-
-        {/* Faux video content — abstract gradient blobs */}
-        <div
-          className="absolute inset-0 opacity-60"
-          style={{
-            background: `
-              radial-gradient(circle at 30% 30%, ${COLORS.gradientFrom}55 0%, transparent 40%),
-              radial-gradient(circle at 70% 70%, ${COLORS.gradientTo}55 0%, transparent 40%),
-              radial-gradient(circle at 50% 90%, ${COLORS.accentSpeech}33 0%, transparent 50%)
-            `,
-          }}
+        <video
+          ref={videoRef}
+          src="/hero-demo.mp4"
+          className="w-full h-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
         />
-
-        {/* Subtitle overlay (mimics the workspace overlay style) */}
-        <div className="absolute inset-x-0 bottom-20 flex justify-center px-6 pointer-events-none">
-          <span
-            key={idx}
-            className="inline-block px-3 py-1.5 rounded text-white text-lg font-bold leading-tight text-center"
-            style={{
-              fontFamily: line.fontFamily || '"Inter", sans-serif',
-              background: GRADIENTS.horizontal,
-              WebkitTextStroke: '1.5px #0B1A33',
-              animation: 'vaacha-rise 320ms cubic-bezier(.2,.8,.2,1) both',
-              maxWidth: '90%',
-            }}
-          >
-            {line.text}
-          </span>
-        </div>
-
-        {/* Language pip */}
-        <div className="absolute top-12 right-4 text-[10px] uppercase tracking-wide text-white/70 font-semibold">
-          {line.lang}
-        </div>
-
-        {/* Faux video controls */}
-        <div className="absolute bottom-3 inset-x-3 flex items-center gap-3 text-white/70">
-          <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs">▶</div>
-          <div className="flex-1 h-1 rounded-full bg-white/15 overflow-hidden">
-            <div className="h-full" style={{ width: '38%', background: GRADIENTS.horizontal }} />
-          </div>
-          <div className="text-[10px] font-mono">0:14</div>
-        </div>
+        {/* Phone notch — sits above the video for the device-frame look. */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-5 rounded-full bg-black/80 z-10" />
+        {/* Play / pause pill — bottom-left. */}
+        <button
+          onClick={togglePlay}
+          aria-label={playing ? 'Pause' : 'Play'}
+          className="absolute bottom-4 left-4 z-10 w-9 h-9 rounded-full bg-black/55 hover:bg-black/75 backdrop-blur text-white text-base flex items-center justify-center shadow-lg transition"
+        >
+          {playing ? '⏸' : '▶'}
+        </button>
+        {/* Mute / unmute pill — bottom-right. */}
+        <button
+          onClick={toggleMute}
+          aria-label={muted ? 'Unmute' : 'Mute'}
+          className="absolute bottom-4 right-4 z-10 w-9 h-9 rounded-full bg-black/55 hover:bg-black/75 backdrop-blur text-white text-base flex items-center justify-center shadow-lg transition"
+        >
+          {muted ? '🔇' : '🔊'}
+        </button>
       </div>
     </div>
   )
