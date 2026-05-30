@@ -47,6 +47,9 @@ export default function DropZone({ onReady }) {
   // /jobs/{id}: queued -> extracting -> transcribing -> ready.
   const [phase, setPhase] = useState(null)        // null | 'uploading' | 'extracting' | 'transcribing' | 'ready'
   const [elapsedMs, setElapsedMs] = useState(0)
+  // Concrete upload progress (0..100). Only meaningful while phase ==
+  // 'uploading'; left at 0 otherwise. Resets at the start of every job.
+  const [uploadPct, setUploadPct] = useState(0)
 
   // Re-tick `elapsedMs` every 50ms while a phase is active. 50ms is fast
   // enough to read like a stopwatch (centiseconds visible) and cheap
@@ -68,10 +71,13 @@ export default function DropZone({ onReady }) {
     }
     setBusy(true); setStatus(null)
     setElapsedMs(0)
+    setUploadPct(0)
     setPhase('uploading')
     track('upload_started', { language, size_mb: Math.round(file.size / 1024 / 1024) })
     try {
-      const { job_id } = await uploadFile(file, language, prompt, startOffset)
+      const { job_id } = await uploadFile(file, language, prompt, startOffset, {
+        onProgress: ({ percent }) => setUploadPct(percent),
+      })
       // Backend consumed a credit (managed flow). Refresh the badge.
       refreshCredits()
       setPhase('extracting')
@@ -147,7 +153,7 @@ export default function DropZone({ onReady }) {
           />
         </div>
 
-        {phase && <ProgressIndicator phase={phase} elapsedMs={elapsedMs} />}
+        {phase && <ProgressIndicator phase={phase} elapsedMs={elapsedMs} uploadPct={uploadPct} />}
 
         {status && !status.ok && (
           <div className="text-xs rounded px-3 py-2 text-center border bg-rose-50 text-rose-700 border-rose-200">
@@ -193,7 +199,7 @@ export default function DropZone({ onReady }) {
  * "something is happening" which is the whole point. A pulsing fill
  * (CSS @keyframes vaacha-shimmer in index.css) sells it.
  */
-function ProgressIndicator({ phase, elapsedMs }) {
+function ProgressIndicator({ phase, elapsedMs, uploadPct = 0 }) {
   const STEPS = [
     { key: 'uploading', label: 'Uploading' },
     { key: 'extracting', label: 'Extracting audio' },
@@ -206,28 +212,41 @@ function ProgressIndicator({ phase, elapsedMs }) {
   const ss = String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, '0')
   const cs = String(Math.floor((elapsedMs % 1000) / 10)).padStart(2, '0')
 
+  // The bar is DETERMINATE during upload (real % from XHR onprogress) and
+  // INDETERMINATE during the rest (we don't have server-side % for
+  // transcription -- a moving stripe is the right "something is happening"
+  // signal there).
+  const isUpload = phase === 'uploading'
+  const labelSuffix = isUpload && uploadPct > 0 ? ` · ${uploadPct}%` : ''
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold text-slate-800">
-          {STEPS[currentIdx]?.label || 'Working'}…
+          {STEPS[currentIdx]?.label || 'Working'}{labelSuffix}…
         </div>
         <div className="font-mono text-sm tabular-nums text-slate-500">
           {mm}:{ss}<span className="text-xs">.{cs}</span>
         </div>
       </div>
 
-      {/* Indeterminate progress bar -- a moving gradient stripe inside a
-          slate track. The actual width % isn't meaningful; the animation
-          is the signal that work is in progress. */}
       <div className="relative h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-        <div
-          className="absolute inset-y-0 w-1/3 rounded-full"
-          style={{
-            background: GRADIENTS.horizontal,
-            animation: 'vaacha-progress 1.4s ease-in-out infinite',
-          }}
-        />
+        {isUpload ? (
+          /* Determinate fill -- width tracks the XHR onprogress %. */
+          <div
+            className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-150 ease-out"
+            style={{ width: `${uploadPct}%`, background: GRADIENTS.horizontal }}
+          />
+        ) : (
+          /* Indeterminate sliding stripe for the rest of the pipeline. */
+          <div
+            className="absolute inset-y-0 w-1/3 rounded-full"
+            style={{
+              background: GRADIENTS.horizontal,
+              animation: 'vaacha-progress 1.4s ease-in-out infinite',
+            }}
+          />
+        )}
       </div>
 
       {/* Step pills, lit progressively as the phase advances. Tiny dot

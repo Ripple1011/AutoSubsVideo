@@ -100,29 +100,69 @@ export async function api(path, { method = 'GET', body, headers = {} } = {}) {
   return data
 }
 
-export async function uploadFile(file, language, prompt = '', startOffset = 0) {
+/**
+ * Upload a video file with real upload-progress callbacks.
+ *
+ * Uses XMLHttpRequest instead of fetch() because fetch has no upload
+ * progress event -- on mobile, a 10MB video over 4G can take 60-90s,
+ * and silent "Uploading..." text reads as "stuck". XHR's onprogress
+ * fires throughout, so we can show actual bytes-sent.
+ *
+ * Re-implements the same 401 retry as fetch-based api() in case the
+ * shared-password gate expires mid-session.
+ *
+ *   uploadFile(file, language, prompt, startOffset, {
+ *     onProgress: ({ loaded, total, percent }) => ...
+ *   })
+ */
+export function uploadFile(file, language, prompt = '', startOffset = 0, opts = {}) {
+  const { onProgress } = opts
   const form = new FormData()
   form.append('file', file)
   form.append('language', language)
   if (prompt) form.append('prompt', prompt)
   if (startOffset > 0) form.append('start_offset', String(startOffset))
-  // Don't set Content-Type — the browser sets multipart boundary itself.
-  const send = () => fetch('/api/upload', {
-    method: 'POST',
-    credentials: 'include',
-    headers: authHeaders(),
-    body: form,
-  })
-  let res = await send()
-  if (res.status === 401) {
-    const data = await res.clone().json().catch(() => ({}))
-    if (handleUnauthorized(data.detail)) {
-      res = await send()
+
+  const send = () => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/upload')
+    xhr.withCredentials = true
+    // Don't set Content-Type -- the browser sets multipart boundary itself.
+    for (const [k, v] of Object.entries(authHeaders())) {
+      xhr.setRequestHeader(k, v)
     }
-  }
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
-  return data
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable || !onProgress) return
+      onProgress({
+        loaded: e.loaded,
+        total: e.total,
+        percent: Math.min(100, Math.round((e.loaded / e.total) * 100)),
+      })
+    }
+    xhr.onload = () => resolve({
+      status: xhr.status,
+      ok: xhr.status >= 200 && xhr.status < 300,
+      text: xhr.responseText,
+    })
+    xhr.onerror = () => reject(new Error('Network error during upload.'))
+    xhr.onabort = () => reject(new Error('Upload aborted.'))
+    xhr.send(form)
+  })
+
+  return (async () => {
+    let res = await send()
+    if (res.status === 401) {
+      let detail = ''
+      try { detail = JSON.parse(res.text).detail || '' } catch { /* not json */ }
+      if (handleUnauthorized(detail)) {
+        res = await send()
+      }
+    }
+    let data = {}
+    try { data = JSON.parse(res.text) } catch { /* keep {} */ }
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+    return data
+  })()
 }
 
 // --- Thumbnail URL ----------------------------------------------------------
