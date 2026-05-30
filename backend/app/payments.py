@@ -57,13 +57,14 @@ def is_test_mode() -> bool:
 
 # ----- One-time orders (packs) ---------------------------------------------
 
-def create_order(amount_paise: int, *, slug: str, user_email: str) -> dict[str, Any]:
+def create_order(amount_paise: int, *, slug: str, user_id: str, user_email: str) -> dict[str, Any]:
     """Create a Razorpay Order for a one-time pack purchase. Returns the
     order dict — the frontend uses `id`, `amount`, and `currency` from this
     when invoking Razorpay Checkout.
 
-    notes.slug and notes.user_email are echoed back in webhook payloads,
-    so we record them here for later credit-grant attribution.
+    notes.slug + notes.user_id + notes.user_email are echoed back in webhook
+    payloads, so the webhook handler can attribute the captured payment to
+    the right user even when the browser tab dies mid-flow.
     """
     client = _client()
     payload = {
@@ -72,6 +73,7 @@ def create_order(amount_paise: int, *, slug: str, user_email: str) -> dict[str, 
         "receipt": f"autosub-{slug}",
         "notes": {
             "slug": slug,
+            "user_id": str(user_id),
             "user_email": user_email,
         },
         "payment_capture": 1,
@@ -104,6 +106,33 @@ def verify_payment_signature(
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, razorpay_signature)
+
+
+# ----- Webhook signature verification (server-to-server) -------------------
+
+def verify_webhook_signature(raw_body: bytes, x_razorpay_signature: str) -> bool:
+    """Razorpay webhooks sign the entire request body (raw bytes, NOT JSON-
+    reserialized) with the webhook secret -- a DIFFERENT secret from the API
+    key secret. The signature arrives in the X-Razorpay-Signature header.
+
+    Webhook secret is set in the Razorpay dashboard when you register the
+    endpoint, then mirrored into our .env as RAZORPAY_WEBHOOK_SECRET.
+
+    We rely on raw bytes because the JSON formatter we get back from the
+    body-parser may not match Razorpay's byte-for-byte serialization
+    (whitespace, key order), which would break HMAC. The endpoint reads
+    request.body() directly to preserve those bytes.
+    """
+    s = get_settings()
+    secret = s.razorpay_webhook_secret
+    if not secret:
+        raise HTTPException(status_code=503, detail="Razorpay webhook secret is not configured.")
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, x_razorpay_signature or "")
 
 
 # ----- Sync plan to Razorpay (admin) ---------------------------------------

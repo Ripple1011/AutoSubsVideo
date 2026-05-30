@@ -426,6 +426,7 @@ async def create_checkout(slug: str, user=Depends(current_active_user)):
             order = payments_module.create_order(
                 plan.price_inr_paise,
                 slug=plan.slug,
+                user_id=user.id,
                 user_email=user.email,
             )
         except Exception as e:
@@ -508,6 +509,105 @@ async def razorpay_verify(body: dict, user=Depends(current_active_user)):
             "balance": balance,
             "credited": plan.credits_granted,
             "source": plan.slug,
+        }
+
+
+@app.post("/razorpay/webhook", tags=["payments"])
+async def razorpay_webhook(request: Request):
+    """Razorpay server-to-server webhook. Fires for events like payment.captured
+    independently of the browser, so a user who closed their tab mid-flow
+    still gets credited.
+
+    Security: verify_webhook_signature() recomputes HMAC-SHA256 over the
+    RAW request body using the webhook secret (registered in the Razorpay
+    dashboard). We must NOT re-serialize the JSON before hashing -- key
+    order or whitespace differences would break the comparison.
+
+    Idempotency: shares the payment_ref-uniqueness check with /razorpay/verify
+    so the browser and webhook racing for the same payment results in exactly
+    one credit grant. Whichever arrives first wins; the second short-circuits.
+
+    Returns 200 on success so Razorpay marks the webhook delivered. Any 5xx
+    triggers Razorpay to retry up to 24h, which is fine for transient
+    failures but means a permanent bug would keep retrying -- watch logs.
+    """
+    raw = await request.body()
+    sig = request.headers.get("X-Razorpay-Signature", "")
+    if not payments_module.verify_webhook_signature(raw, sig):
+        # 400 (not 401) so Razorpay's UI shows the signature mismatch clearly
+        # in their webhook delivery log, which is the usual cause of this --
+        # mismatched secret between dashboard and our .env.
+        raise HTTPException(status_code=400, detail="Invalid webhook signature.")
+
+    import json
+    payload = json.loads(raw)
+    event = payload.get("event")
+    # We only act on payment.captured. Razorpay sends a bunch of other events
+    # (payment.failed, order.paid, subscription.activated, ...) -- for now we
+    # silently 200 those so they don't fill the retry queue, but log them so
+    # we know what's flowing.
+    if event != "payment.captured":
+        print(f"[razorpay-webhook] received {event} -- ignored", flush=True)
+        return {"ok": True, "ignored_event": event}
+
+    # Razorpay nests the payment under payload.payment.entity. The order_id
+    # carries our plan slug via notes, which is the only way to know which
+    # plan to credit -- the payment itself doesn't reference a plan directly.
+    try:
+        payment = payload["payload"]["payment"]["entity"]
+        payment_id = payment["id"]
+        order_id = payment.get("order_id")
+        notes = payment.get("notes") or {}
+        slug = notes.get("slug")
+        # `notes` is stamped at order-creation time in payments.create_order().
+        # If it's missing the webhook is for a payment created outside our
+        # /checkout flow (e.g. a payment link from the dashboard) -- skip it
+        # so we don't accidentally credit the wrong plan.
+        if not slug:
+            print(f"[razorpay-webhook] {payment_id} has no slug in notes -- skipping", flush=True)
+            return {"ok": True, "skipped": "no_slug"}
+        user_id = notes.get("user_id")
+        if not user_id:
+            print(f"[razorpay-webhook] {payment_id} has no user_id in notes -- skipping", flush=True)
+            return {"ok": True, "skipped": "no_user_id"}
+    except (KeyError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=f"Malformed webhook payload: {e}")
+
+    from sqlalchemy import select
+    from .auth import async_session_maker
+    from .credits import CreditGrant
+    async with async_session_maker() as session:
+        # Same idempotency check as /razorpay/verify -- if the browser already
+        # ran the success-handler verify, we've already credited this payment_id.
+        existing = (await session.execute(
+            select(CreditGrant).where(CreditGrant.payment_ref == payment_id)
+        )).scalar_one_or_none()
+        if existing:
+            return {"ok": True, "already_credited": True, "payment_id": payment_id}
+
+        plan = (await session.execute(
+            select(plans_module.Plan).where(plans_module.Plan.slug == slug)
+        )).scalar_one_or_none()
+        if not plan:
+            print(f"[razorpay-webhook] unknown plan slug {slug} -- skipping", flush=True)
+            return {"ok": True, "skipped": "unknown_plan"}
+
+        # uuid casting: webhook notes round-trip through JSON, so user_id
+        # arrives as a string. The credits module accepts either.
+        await credits_module.grant_credits(
+            user_id,
+            source=plan.slug,
+            credits=plan.credits_granted,
+            payment_ref=payment_id,
+            session=session,
+        )
+        await session.commit()
+        print(f"[razorpay-webhook] credited {plan.credits_granted} to user {user_id} for {payment_id}", flush=True)
+        return {
+            "ok": True,
+            "credited": plan.credits_granted,
+            "user_id": str(user_id),
+            "payment_id": payment_id,
         }
 
 

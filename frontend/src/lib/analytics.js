@@ -1,5 +1,44 @@
 import posthog from 'posthog-js'
 
+// ----- Google Analytics 4 (gtag.js) ---------------------------------------
+// Loaded alongside PostHog because they answer different questions: GA4 is
+// for marketing / ad attribution ("which channel sent this user"), PostHog
+// is for product behavior ("did this user reach the export step"). GA4 is
+// optional -- the bootstrap below no-ops if VITE_GA4_ID isn't set.
+
+const GA4_ID = import.meta.env.VITE_GA4_ID
+
+function loadGA4() {
+  if (!GA4_ID) return
+  // Inject the gtag loader exactly per Google's recommended snippet.
+  // Async, so it never blocks page paint.
+  const s = document.createElement('script')
+  s.async = true
+  s.src = `https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`
+  document.head.appendChild(s)
+  window.dataLayer = window.dataLayer || []
+  function gtag() { window.dataLayer.push(arguments) }
+  window.gtag = gtag
+  gtag('js', new Date())
+  // send_page_view=false because we fire pageviews manually on route change
+  // (same reason we do this for PostHog -- SPA route changes don't trigger
+  // the default auto-pageview).
+  gtag('config', GA4_ID, { send_page_view: false })
+}
+
+function ga4Pageview(path) {
+  if (!GA4_ID || !window.gtag) return
+  window.gtag('event', 'page_view', {
+    page_path: path,
+    page_location: window.location.origin + path,
+  })
+}
+
+function ga4Event(name, props) {
+  if (!GA4_ID || !window.gtag) return
+  window.gtag('event', name, props || {})
+}
+
 /**
  * Thin wrapper around posthog-js so the rest of the app talks to a small
  * stable surface (`track`, `identify`, `reset`) rather than the SDK directly.
@@ -25,6 +64,11 @@ const ENABLED = Boolean(KEY) && (!import.meta.env.DEV || import.meta.env.VITE_PO
 let initialized = false
 
 export function initAnalytics() {
+  // GA4 doesn't care about ENABLED (it's a separate gate via VITE_GA4_ID)
+  // and we want GA4 to run even in dev if the env var is set, because GA4
+  // already debounces well and is mainly used post-launch for ad attribution.
+  loadGA4()
+
   if (!ENABLED || initialized) return
   posthog.init(KEY, {
     api_host: HOST,
@@ -36,10 +80,10 @@ export function initAnalytics() {
   initialized = true
 }
 
-/** Fire a custom event. No-op if analytics disabled. */
+/** Fire a custom event to both PostHog and GA4. Each no-ops independently. */
 export function track(name, props) {
-  if (!ENABLED || !initialized) return
-  posthog.capture(name, props)
+  if (ENABLED && initialized) posthog.capture(name, props)
+  ga4Event(name, props)
 }
 
 /** Tie this browser session to a user_id once login succeeds. */
@@ -54,8 +98,10 @@ export function reset() {
   posthog.reset()
 }
 
-/** Manual pageview -- called from a useEffect on route changes. */
+/** Manual pageview -- fires on route changes, sent to both backends. */
 export function pageview(path) {
-  if (!ENABLED || !initialized) return
-  posthog.capture('$pageview', { $current_url: window.location.origin + path })
+  if (ENABLED && initialized) {
+    posthog.capture('$pageview', { $current_url: window.location.origin + path })
+  }
+  ga4Pageview(path)
 }
