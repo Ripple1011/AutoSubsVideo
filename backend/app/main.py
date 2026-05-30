@@ -673,10 +673,14 @@ async def upload(
     """
     is_byok = bool(x_user_asr_key)
     if not is_byok:
-        # Managed users can't downgrade onto a cheaper-but-worse model by
-        # poking the dropdown; force pro server-side.
+        # Managed users: force Gemini 2.5 Flash server-side. Pro was 2-3x
+        # slower per second of audio (~50s for a 10s clip) and accuracy on
+        # short-form video was effectively identical to Flash. Flash brings
+        # us back to ~22-25s for a 60s clip, which is the perceived "fast"
+        # bar creators expect from a SaaS like this. BYOK users can still
+        # opt INTO Pro via the Settings modal.
         x_user_asr_provider = "gemini"
-        x_user_asr_model = "gemini-2.5-pro"
+        x_user_asr_model = "gemini-2.5-flash"
 
     # Validate credentials up front so the user fails fast — don't write the
     # file to disk if their key/provider combo is invalid.
