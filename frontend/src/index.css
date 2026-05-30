@@ -22,6 +22,15 @@ html, body, #root {
   50%      { opacity: 1;   transform: scale(1.05); }
 }
 
+/* Indeterminate progress bar used during upload + transcription. A 33%
+   wide stripe slides left-to-right and back, sells "work in progress"
+   without claiming a (false) percent-complete number. */
+@keyframes vaacha-progress {
+  0%   { left: -33%; }
+  50%  { left: 100%; }
+  100% { left: -33%; }
+}
+
 /* Subtitle entrance animations. Duration is controlled per-instance via
    the `--anim-duration` custom property set on the element. */
 
