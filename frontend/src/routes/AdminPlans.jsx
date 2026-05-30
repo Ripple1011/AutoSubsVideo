@@ -234,7 +234,7 @@ function PlanRow({ plan, onSaved }) {
             type="number" min={0}
             value={draft.credits_granted}
             onChange={(e) => setDraft({ ...draft, credits_granted: e.target.value })}
-            className={`${inputCls} w-20 font-mono`}
+            className={`${inputCls} w-28 font-mono`}
           />
         </td>
         <td className={cell}>
@@ -242,7 +242,7 @@ function PlanRow({ plan, onSaved }) {
             type="number" min={0} step="0.01"
             value={draft.price_inr}
             onChange={(e) => setDraft({ ...draft, price_inr: e.target.value })}
-            className={`${inputCls} w-24 font-mono`}
+            className={`${inputCls} w-28 font-mono`}
           />
         </td>
         <td className={cell}>
@@ -254,7 +254,7 @@ function PlanRow({ plan, onSaved }) {
             value={draft.rollover_cap}
             placeholder="—"
             onChange={(e) => setDraft({ ...draft, rollover_cap: e.target.value })}
-            className={`${inputCls} w-20 font-mono`}
+            className={`${inputCls} w-28 font-mono`}
           />
         </td>
         <td className={cell}>
@@ -263,7 +263,7 @@ function PlanRow({ plan, onSaved }) {
             value={draft.max_video_seconds}
             placeholder="—"
             onChange={(e) => setDraft({ ...draft, max_video_seconds: e.target.value })}
-            className={`${inputCls} w-20 font-mono`}
+            className={`${inputCls} w-28 font-mono`}
             title="Per-plan upload cap in seconds. Empty = inherit site-wide max."
           />
         </td>

@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* Hide the up/down spinner on number inputs. The spinner eats ~20px on the
+   right side of the input, which on narrow cells like the admin plan
+   editor visibly chops the rightmost digit (e.g. 600 renders as "60"
+   inside a w-24 box). We rely on keyboard input for these fields. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 html, body, #root {
   margin: 0;
   height: 100%;
