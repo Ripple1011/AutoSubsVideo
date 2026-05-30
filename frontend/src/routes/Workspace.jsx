@@ -93,9 +93,14 @@ export default function Workspace() {
   if (isMobile) {
     return (
       <main className="flex-1 flex flex-col min-h-0 bg-white">
+        {/* Video band. Sized so a 9:16 video fits without cropping at
+            common phone aspect ratios (~19.5:9 = ~390x844). Width is
+            naturally ~clamped by the viewport, height tracks 56vh which
+            on an iPhone 14 is ~470px; 9:16 of 264px wide (after padding)
+            is also ~470px, so we don't waste either dimension. */}
         <div
-          className="bg-slate-900 flex items-center justify-center p-3 flex-shrink-0 overflow-hidden"
-          style={{ height: '45vh' }}
+          className="bg-slate-900 flex items-center justify-center p-2 flex-shrink-0 overflow-hidden"
+          style={{ height: '56vh' }}
         >
           {canvas}
         </div>

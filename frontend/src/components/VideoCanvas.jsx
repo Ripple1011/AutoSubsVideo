@@ -135,9 +135,16 @@ export default function VideoCanvas({
   const animDuration = { fast: '160ms', normal: '280ms', slow: '480ms' }[style.animationSpeed] || '280ms'
 
   return (
-    <div className="flex flex-col gap-3 max-w-full">
+    <div className="flex flex-col gap-3 max-w-full max-h-full h-full items-center justify-center">
       <div
-        className="relative bg-black rounded-lg overflow-hidden max-h-[82vh] max-w-full"
+        // `max-h-full` clamps to whatever the parent allots (45vh / 56vh on
+        // mobile, the grid cell on desktop). `max-h-[82vh]` was the old
+        // global ceiling -- harmless on desktop where parents are larger,
+        // but on mobile it let the canvas overflow the 56vh band and the
+        // bottom of tall 9:16 videos was clipped by the parent's
+        // overflow-hidden. Switching to max-h-full lets aspect-ratio drive
+        // width-from-height correctly within whatever parent height exists.
+        className="relative bg-black rounded-lg overflow-hidden max-h-full max-w-full"
         style={{ aspectRatio }}
       >
       {videoUrl ? (
