@@ -40,39 +40,41 @@ export default function AppTopBar() {
   const styleSchema = workspaceId ? loadSavedStyle() : null
 
   return (
-    <header className="px-6 py-3 border-b border-slate-200 bg-white flex items-center justify-between flex-shrink-0">
-      <Link to="/projects" className="flex items-center" title={BRAND.name}>
-        <img src={LOGO.full} alt={BRAND.name} className="h-12 w-auto block" />
+    <header className="px-3 sm:px-6 py-3 border-b border-slate-200 bg-white flex items-center justify-between flex-shrink-0 gap-2">
+      <Link to="/projects" className="flex items-center flex-shrink-0" title={BRAND.name}>
+        <img src={LOGO.full} alt={BRAND.name} className="h-10 sm:h-12 w-auto block" />
       </Link>
-      <div className="flex items-center gap-5 text-sm">
-        <Link to="/projects" className="text-slate-600 hover:text-slate-900 font-medium">
+      <div className="flex items-center gap-2 sm:gap-5 text-sm">
+        {/* Desktop-only inline nav. On mobile these collapse into the avatar
+            dropdown so the bar fits a 360px viewport. */}
+        <Link to="/projects" className="hidden md:inline text-slate-600 hover:text-slate-900 font-medium">
           My Projects
         </Link>
-        {/* Logged-in CTA: prompt to buy more credits (action-oriented).
-            Logged-out users see this through Pricing on the public chrome,
-            so we don't render anything here for the (rare) logged-out
-            visitor who somehow landed on an authed-only page. */}
         {user && (
           <Link
             to="/pricing"
-            className="text-[#7C3AED] hover:text-[#6D28D9] font-semibold"
+            className="hidden md:inline text-[#7C3AED] hover:text-[#6D28D9] font-semibold"
           >
             🪙 Buy credits
           </Link>
         )}
+        {/* Primary CTA stays visible on every viewport -- the entire point of
+            the app is creating a new video, so the button never hides. */}
         <Link
           to="/projects/new"
           style={{ background: GRADIENTS.horizontal }}
-          className="px-4 py-1.5 rounded-full text-white text-sm font-semibold shadow-md hover:shadow-lg transition-shadow"
+          className="px-3 sm:px-4 py-1.5 rounded-full text-white text-xs sm:text-sm font-semibold shadow-md hover:shadow-lg transition-shadow whitespace-nowrap"
         >
-          ＋ New Video
+          ＋ New
         </Link>
         {workspaceId && (
           <ExportMenu jobId={workspaceId} styleSchema={styleSchema} />
         )}
         {user && <CreditsBadge />}
+        {/* Settings cog -- desktop-only icon. Mobile users reach Settings
+            through the avatar dropdown ("Settings" row added there). */}
         <button
-          className="text-slate-600 hover:text-slate-900"
+          className="hidden md:inline text-slate-600 hover:text-slate-900"
           onClick={() => setSettingsOpen(true)}
         >
           ⚙ Settings
@@ -96,6 +98,29 @@ export default function AppTopBar() {
                 <div className="px-3 py-2 text-xs text-slate-500 border-b border-slate-200 truncate">
                   {user.email}
                 </div>
+                {/* These three rows only appear on mobile -- desktop already
+                    has them in the inline nav, so duplicating in the menu
+                    would be clutter. md:hidden hides the wrapper above lg. */}
+                <div className="md:hidden">
+                  <button
+                    onClick={() => { setUserMenuOpen(false); navigate('/projects') }}
+                    className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    My Projects
+                  </button>
+                  <button
+                    onClick={() => { setUserMenuOpen(false); navigate('/pricing') }}
+                    className="block w-full text-left px-3 py-2 text-sm text-[#7C3AED] font-semibold hover:bg-slate-100"
+                  >
+                    🪙 Buy credits
+                  </button>
+                  <button
+                    onClick={() => { setUserMenuOpen(false); setSettingsOpen(true) }}
+                    className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 border-b border-slate-200"
+                  >
+                    ⚙ Settings
+                  </button>
+                </div>
                 <button
                   onClick={() => { setUserMenuOpen(false); navigate('/account') }}
                   className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
@@ -104,7 +129,7 @@ export default function AppTopBar() {
                 </button>
                 <button
                   onClick={() => { setUserMenuOpen(false); navigate('/pricing') }}
-                  className="block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  className="hidden md:block w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                 >
                   Pricing
                 </button>
