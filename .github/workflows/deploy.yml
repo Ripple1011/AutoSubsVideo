@@ -1,0 +1,69 @@
+name: Deploy to VPS
+
+# Two triggers:
+#   1. push to main -- auto-deploy whenever a slice is merged
+#   2. workflow_dispatch -- "Run workflow" button in the Actions tab, lets
+#      us redeploy on demand without making a new commit (handy when only
+#      .env on the server changed, or to retry after a transient failure).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel any in-flight deploy if a newer push lands while one is running.
+# Pile-ups are pointless -- the newer commit will overwrite anyway.
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Pull, build, restart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: SSH into VPS and deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # Single -e bash script so an early failure aborts the rest. Each
+          # logical step prints its label so the GitHub Actions log is
+          # readable when something goes wrong (which it eventually will).
+          script: |
+            set -e
+            cd ~/autosub
+            echo "::group::Reset stray lockfile changes"
+            # frontend/package-lock.json gets touched by `npm install` on the
+            # VPS and would block git pull -- discard those local changes.
+            git checkout -- frontend/package-lock.json 2>/dev/null || true
+            echo "::endgroup::"
+
+            echo "::group::Pull latest main"
+            git fetch origin main
+            git reset --hard origin/main
+            echo "Now at: $(git log --oneline -1)"
+            echo "::endgroup::"
+
+            echo "::group::Install backend deps (if requirements changed)"
+            cd backend
+            source .venv/bin/activate
+            pip install -q -r requirements.txt
+            cd ..
+            echo "::endgroup::"
+
+            echo "::group::Build frontend"
+            cd frontend
+            npm install --no-audit --no-fund
+            npm run build
+            cd ..
+            echo "::endgroup::"
+
+            echo "::group::Restart service"
+            systemctl restart autosub
+            sleep 2
+            systemctl is-active autosub
+            echo "::endgroup::"
+
+            echo "✓ Deploy complete"
