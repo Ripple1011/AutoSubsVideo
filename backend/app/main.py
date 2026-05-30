@@ -264,6 +264,7 @@ async def admin_create_plan(body: dict, _=Depends(current_superuser)):
             price_inr_paise=int(body["price_inr_paise"]),
             cadence=body["cadence"],
             rollover_cap=body.get("rollover_cap"),
+            max_video_seconds=body.get("max_video_seconds"),
             active=bool(body.get("active", True)),
             sort_order=int(body.get("sort_order", 0)),
         )
@@ -289,7 +290,8 @@ async def admin_update_plan(plan_id: str, body: dict, _=Depends(current_superuse
     from .auth import async_session_maker
     editable = {
         "display_name", "description", "credits_granted",
-        "price_inr_paise", "rollover_cap", "active", "sort_order",
+        "price_inr_paise", "rollover_cap", "max_video_seconds",
+        "active", "sort_order",
     }
     try:
         pid = uuid.UUID(plan_id)
@@ -306,7 +308,7 @@ async def admin_update_plan(plan_id: str, body: dict, _=Depends(current_superuse
                 continue
             if k in ("credits_granted", "price_inr_paise", "sort_order"):
                 setattr(plan, k, int(v))
-            elif k == "rollover_cap":
+            elif k in ("rollover_cap", "max_video_seconds"):
                 setattr(plan, k, int(v) if v is not None else None)
             elif k == "active":
                 setattr(plan, k, bool(v))
@@ -762,8 +764,8 @@ async def upload(
         duration = probe_duration(str(target))
     except Exception:
         duration = 0.0  # ffprobe failed; let the pipeline surface real error
-    from .admin_settings import current_max_video_seconds
-    max_seconds = float(await current_max_video_seconds())
+    from .admin_settings import max_video_seconds_for_user
+    max_seconds = float(await max_video_seconds_for_user(user.id))
     if duration > max_seconds:
         if consumed_grant_id is not None:
             await refund_credit(consumed_grant_id)

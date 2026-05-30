@@ -263,6 +263,11 @@ function PlanCard({ plan, navigate, authed }) {
           <span className="text-xs text-slate-400"> · rolls over up to {plan.rollover_cap}</span>
         )}
       </div>
+      {plan.max_video_seconds && (
+        <div className="mt-1 text-xs text-slate-500">
+          ⏱ Up to {plan.max_video_seconds}s per video
+        </div>
+      )}
 
       {/* Flex spacer — absorbs any vertical-height difference between cards
           so all Buy buttons in the row land on the same baseline. */}

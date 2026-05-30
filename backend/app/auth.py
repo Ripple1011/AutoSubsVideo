@@ -76,9 +76,39 @@ async_session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=
 
 
 async def create_db_and_tables() -> None:
-    """Create the SQLite tables on first boot. Safe to call repeatedly."""
+    """Create the SQLite tables on first boot. Safe to call repeatedly.
+
+    Also runs lightweight inline migrations -- SQLAlchemy's create_all only
+    creates MISSING tables, it never adds new columns to existing ones.
+    For a single-file SQLite DB with low traffic, an ALTER TABLE IF NOT
+    EXISTS pattern beats pulling in Alembic. Keep this list short; if it
+    grows past ~5 statements migrate to Alembic properly.
+    """
+    from sqlalchemy import text
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Each migration: check whether the column already exists, add it
+        # if not. SQLite PRAGMA table_info returns one row per column.
+        async def _has_col(table: str, col: str) -> bool:
+            rows = (await conn.execute(text(f"PRAGMA table_info({table})"))).all()
+            return any(r[1] == col for r in rows)
+
+        if not await _has_col("plans", "max_video_seconds"):
+            await conn.execute(text("ALTER TABLE plans ADD COLUMN max_video_seconds INTEGER"))
+            # Backfill the four seed slugs with the same defaults the new
+            # _SEED_PLANS list ships. Plans created later by the admin keep
+            # their NULL (= inherit site-wide max) until edited.
+            for slug, secs in (
+                ("pack_10", 60),
+                ("pack_50", 120),
+                ("monthly", 300),
+                ("annual", 600),
+            ):
+                await conn.execute(
+                    text("UPDATE plans SET max_video_seconds = :s WHERE slug = :slug AND max_video_seconds IS NULL"),
+                    {"s": secs, "slug": slug},
+                )
+            print("[migrate] added plans.max_video_seconds + backfilled seed slugs", flush=True)
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

@@ -102,6 +102,7 @@ export default function AdminPlans() {
                   <th className="py-2 pr-3 font-normal">Price (₹)</th>
                   <th className="py-2 pr-3 font-normal">Cadence</th>
                   <th className="py-2 pr-3 font-normal">Rollover</th>
+                  <th className="py-2 pr-3 font-normal">Max video (s)</th>
                   <th className="py-2 pr-3 font-normal">Order</th>
                   <th className="py-2 pr-3 font-normal">Active</th>
                   <th className="py-2 pr-3 font-normal">Razorpay</th>
@@ -146,6 +147,7 @@ function PlanRow({ plan, onSaved }) {
     credits_granted: plan.credits_granted,
     price_inr: plan.price_inr,
     rollover_cap: plan.rollover_cap ?? '',
+    max_video_seconds: plan.max_video_seconds ?? '',
     sort_order: plan.sort_order,
     active: plan.active,
   })
@@ -159,6 +161,7 @@ function PlanRow({ plan, onSaved }) {
     || Number(draft.credits_granted) !== plan.credits_granted
     || Number(draft.price_inr) !== plan.price_inr
     || (draft.rollover_cap === '' ? null : Number(draft.rollover_cap)) !== plan.rollover_cap
+    || (draft.max_video_seconds === '' ? null : Number(draft.max_video_seconds)) !== plan.max_video_seconds
     || Number(draft.sort_order) !== plan.sort_order
     || Boolean(draft.active) !== plan.active
   )
@@ -188,6 +191,7 @@ function PlanRow({ plan, onSaved }) {
           credits_granted: Number(draft.credits_granted),
           price_inr_paise: Math.round(Number(draft.price_inr) * 100),
           rollover_cap: draft.rollover_cap === '' ? null : Number(draft.rollover_cap),
+          max_video_seconds: draft.max_video_seconds === '' ? null : Number(draft.max_video_seconds),
           sort_order: Number(draft.sort_order),
           active: Boolean(draft.active),
         },
@@ -255,6 +259,16 @@ function PlanRow({ plan, onSaved }) {
         </td>
         <td className={cell}>
           <input
+            type="number" min={10} max={3600}
+            value={draft.max_video_seconds}
+            placeholder="—"
+            onChange={(e) => setDraft({ ...draft, max_video_seconds: e.target.value })}
+            className={`${inputCls} w-20 font-mono`}
+            title="Per-plan upload cap in seconds. Empty = inherit site-wide max."
+          />
+        </td>
+        <td className={cell}>
+          <input
             type="number" min={0}
             value={draft.sort_order}
             onChange={(e) => setDraft({ ...draft, sort_order: e.target.value })}
@@ -304,7 +318,7 @@ function PlanRow({ plan, onSaved }) {
       </tr>
       {rowError && (
         <tr className="border-t border-rose-200">
-          <td colSpan={11} className="py-1.5 px-3 text-xs text-rose-700 bg-rose-50">
+          <td colSpan={12} className="py-1.5 px-3 text-xs text-rose-700 bg-rose-50">
             {rowError}
           </td>
         </tr>
@@ -325,6 +339,7 @@ function PlanCard({ plan, onSaved }) {
     credits_granted: plan.credits_granted,
     price_inr: plan.price_inr,
     rollover_cap: plan.rollover_cap ?? '',
+    max_video_seconds: plan.max_video_seconds ?? '',
     sort_order: plan.sort_order,
     active: plan.active,
   })
@@ -338,6 +353,7 @@ function PlanCard({ plan, onSaved }) {
     || Number(draft.credits_granted) !== plan.credits_granted
     || Number(draft.price_inr) !== plan.price_inr
     || (draft.rollover_cap === '' ? null : Number(draft.rollover_cap)) !== plan.rollover_cap
+    || (draft.max_video_seconds === '' ? null : Number(draft.max_video_seconds)) !== plan.max_video_seconds
     || Number(draft.sort_order) !== plan.sort_order
     || Boolean(draft.active) !== plan.active
   )
@@ -365,6 +381,7 @@ function PlanCard({ plan, onSaved }) {
           credits_granted: Number(draft.credits_granted),
           price_inr_paise: Math.round(Number(draft.price_inr) * 100),
           rollover_cap: draft.rollover_cap === '' ? null : Number(draft.rollover_cap),
+          max_video_seconds: draft.max_video_seconds === '' ? null : Number(draft.max_video_seconds),
           sort_order: Number(draft.sort_order),
           active: Boolean(draft.active),
         },
@@ -432,6 +449,16 @@ function PlanCard({ plan, onSaved }) {
               value={draft.rollover_cap}
               placeholder="—"
               onChange={(e) => setDraft({ ...draft, rollover_cap: e.target.value })}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+          <div>
+            <label className={label}>Max video (s)</label>
+            <input
+              type="number" min={10} max={3600} inputMode="numeric"
+              value={draft.max_video_seconds}
+              placeholder="—"
+              onChange={(e) => setDraft({ ...draft, max_video_seconds: e.target.value })}
               className={`${inputCls} font-mono`}
             />
           </div>

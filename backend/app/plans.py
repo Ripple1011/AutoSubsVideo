@@ -49,6 +49,11 @@ class Plan(Base):
     price_inr_paise: Mapped[int] = mapped_column(Integer)  # ₹49.00 = 4900
     cadence: Mapped[str] = mapped_column(String(16))       # one_time | monthly | annual
     rollover_cap: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Per-plan upload cap in seconds. NULL = inherit the site-wide max
+    # (admin_settings.max_video_seconds, in turn falling back to env). Lets
+    # higher tiers offer longer videos as a real value prop without
+    # touching the global default.
+    max_video_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     razorpay_plan_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -75,6 +80,7 @@ _SEED_PLANS: list[dict] = [
         "price_inr_paise": 4900,        # ₹49
         "cadence": CADENCE_ONE_TIME,
         "rollover_cap": None,
+        "max_video_seconds": 60,
     },
     {
         "slug": "pack_50",
@@ -84,6 +90,7 @@ _SEED_PLANS: list[dict] = [
         "price_inr_paise": 19900,       # ₹199
         "cadence": CADENCE_ONE_TIME,
         "rollover_cap": None,
+        "max_video_seconds": 120,
     },
     {
         "slug": "monthly",
@@ -93,6 +100,7 @@ _SEED_PLANS: list[dict] = [
         "price_inr_paise": 39900,       # ₹399
         "cadence": CADENCE_MONTHLY,
         "rollover_cap": 300,
+        "max_video_seconds": 300,
     },
     {
         "slug": "annual",
@@ -102,6 +110,7 @@ _SEED_PLANS: list[dict] = [
         "price_inr_paise": 299900,      # ₹2,999
         "cadence": CADENCE_ANNUAL,
         "rollover_cap": None,
+        "max_video_seconds": 600,
     },
 ]
 
@@ -153,6 +162,7 @@ def to_dict(plan: Plan) -> dict:
         "price_inr": plan.price_inr_paise / 100,
         "cadence": plan.cadence,
         "rollover_cap": plan.rollover_cap,
+        "max_video_seconds": plan.max_video_seconds,
         "razorpay_plan_id": plan.razorpay_plan_id,
         "purchasable": bool(plan.razorpay_plan_id),
         "active": plan.active,

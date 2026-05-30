@@ -78,3 +78,57 @@ async def set_int(key: str, value: Optional[int]) -> None:
 # falls back to settings.max_video_seconds from .env.
 async def current_max_video_seconds() -> int:
     return await get_int(KEY_MAX_VIDEO_SECONDS, get_settings().max_video_seconds)
+
+
+async def max_video_seconds_for_user(user_id) -> int:
+    """Resolve the upload cap for a specific user.
+
+    Logic:
+      1. Look up the user's unexpired credit grants. The 'source' column on
+         each grant is the plan slug (or 'signup_bonus' / 'superuser_dev').
+      2. For each grant matching a real Plan row, read that plan's
+         max_video_seconds. Take the MAX across all matched plans -- if a
+         user has Pro Monthly (300s) AND a Starter Pack (60s), they get the
+         300s privilege. Buying down doesn't punish.
+      3. If no plan-backed grants resolve a value, fall through to the
+         site-wide max via current_max_video_seconds().
+
+    Returns the cap in seconds. The upload handler clamps videos longer
+    than this with HTTP 413.
+    """
+    import uuid as _uuid
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from .plans import Plan
+    from .credits import CreditGrant
+
+    # Normalize id (caller may pass str or UUID).
+    if isinstance(user_id, str):
+        try:
+            user_id = _uuid.UUID(user_id)
+        except ValueError:
+            return await current_max_video_seconds()
+
+    now = datetime.now(timezone.utc)
+    best: Optional[int] = None
+    async with async_session_maker() as session:
+        # Pull active grants joined to their plan rows (left-joined since
+        # signup_bonus / refund grants have no plan row).
+        grants = (await session.execute(
+            select(CreditGrant, Plan)
+            .outerjoin(Plan, Plan.slug == CreditGrant.source)
+            .where(
+                CreditGrant.user_id == user_id,
+                CreditGrant.credits_remaining > 0,
+            )
+        )).all()
+        for grant, plan in grants:
+            if grant.expires_at and grant.expires_at <= now:
+                continue
+            if plan and plan.max_video_seconds is not None:
+                if best is None or plan.max_video_seconds > best:
+                    best = plan.max_video_seconds
+
+    if best is not None:
+        return best
+    return await current_max_video_seconds()
