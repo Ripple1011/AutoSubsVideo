@@ -31,6 +31,7 @@ from .credits import (
 from . import plans as plans_module
 from . import payments as payments_module
 from . import credits as credits_module
+from . import admin_settings as admin_settings_module  # noqa: F401  -- import for table registration
 from .config import get_settings
 from .fonts import ensure_fonts_present
 from .schemas import UserRead, UserCreate, UserUpdate
@@ -394,6 +395,43 @@ async def admin_sync_to_razorpay(
         }
 
 
+@app.get("/admin/settings", tags=["admin"])
+async def admin_get_settings(user=Depends(current_active_user)):
+    """Return all runtime-editable admin knobs and their current values.
+    Falls back to .env defaults for keys with no DB override -- so the UI
+    sees the actual value in effect, not just what's in the DB."""
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin only.")
+    from .admin_settings import current_max_video_seconds
+    return {
+        "max_video_seconds": await current_max_video_seconds(),
+        "max_video_seconds_default": get_settings().max_video_seconds,
+    }
+
+
+@app.patch("/admin/settings", tags=["admin"])
+async def admin_patch_settings(body: dict, user=Depends(current_active_user)):
+    """Update one or more admin knobs. Pass null to revert a key back to
+    its .env default. Only fields present in `body` are touched."""
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin only.")
+    from .admin_settings import KEY_MAX_VIDEO_SECONDS, set_int, current_max_video_seconds
+    if "max_video_seconds" in body:
+        v = body["max_video_seconds"]
+        if v is not None:
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="max_video_seconds must be an integer.")
+            if v < 10 or v > 3600:
+                raise HTTPException(status_code=400, detail="max_video_seconds must be between 10 and 3600.")
+        await set_int(KEY_MAX_VIDEO_SECONDS, v)
+    return {
+        "max_video_seconds": await current_max_video_seconds(),
+        "max_video_seconds_default": get_settings().max_video_seconds,
+    }
+
+
 @app.post("/checkout/{slug}", tags=["payments"])
 async def create_checkout(slug: str, user=Depends(current_active_user)):
     """Start a checkout for the given plan slug. Returns the config the
@@ -709,17 +747,24 @@ async def upload(
     with target.open("wb") as out:
         shutil.copyfileobj(file.file, out)
 
-    # 60-second hard cap on the source video, enforced server-side. We probe
-    # the file as written rather than trusting any client-side claim. Files
-    # over the cap get rejected, the credit gets refunded, and the upload
-    # directory is purged so disk doesn't fill with oversized attempts.
+    # Hard cap on the source video, enforced server-side. We probe the file
+    # as written rather than trusting any client-side claim. Files over the
+    # cap get rejected, the credit gets refunded, and the upload directory
+    # is purged so disk doesn't fill with oversized attempts.
+    #
+    # The cap comes from settings.max_video_seconds (env: MAX_VIDEO_SECONDS).
+    # Default is 600s; the admin /admin/settings UI flips this live without
+    # a restart by writing a settings row and the API re-reads it on each
+    # upload. For now the value is fetched per-request straight from env,
+    # so changing it requires editing .env + systemctl restart autosub.
     try:
         from .video_worker import probe_duration
         duration = probe_duration(str(target))
     except Exception:
         duration = 0.0  # ffprobe failed; let the pipeline surface real error
-    MAX_SECONDS = 60.0
-    if duration > MAX_SECONDS:
+    from .admin_settings import current_max_video_seconds
+    max_seconds = float(await current_max_video_seconds())
+    if duration > max_seconds:
         if consumed_grant_id is not None:
             await refund_credit(consumed_grant_id)
         try:
@@ -729,7 +774,7 @@ async def upload(
         raise HTTPException(
             status_code=413,
             detail=(
-                f"Video is {duration:.1f}s; the limit for shorts is {int(MAX_SECONDS)}s. "
+                f"Video is {duration:.1f}s; the limit is {int(max_seconds)}s. "
                 "Trim the clip and try again."
             ),
         )

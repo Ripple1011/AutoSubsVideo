@@ -60,12 +60,22 @@ export default function AdminPlans() {
     <div className="max-w-6xl mx-auto p-4 sm:p-6 pb-12">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Plan Management</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Admin</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Edit prices, credits, or visibility. Slug and cadence are immutable
-            after creation.
+            Site-wide settings and plan management. Changes take effect
+            immediately -- no restart required.
           </p>
         </div>
+      </div>
+
+      <AdminSettingsCard />
+
+      <div className="mb-2 mt-8">
+        <h3 className="text-lg font-semibold tracking-tight">Plans</h3>
+        <p className="text-xs text-slate-500 mt-1">
+          Edit prices, credits, or visibility. Slug and cadence are immutable
+          after creation.
+        </p>
       </div>
 
       {error && (
@@ -482,6 +492,92 @@ function PlanCard({ plan, onSaved }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Site-wide admin knobs (currently just max video seconds). Loads from
+ * GET /admin/settings on mount, PATCHes on Save. Empty input + Save
+ * clears the override and falls back to the .env default -- the helper
+ * text below the input shows the .env default value for context.
+ */
+function AdminSettingsCard() {
+  const [maxSecs, setMaxSecs] = useState('')
+  const [defaultSecs, setDefaultSecs] = useState(null)
+  const [loaded, setLoaded] = useState(false)
+  const [original, setOriginal] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [savedAt, setSavedAt] = useState(null)
+
+  useEffect(() => {
+    api('/admin/settings').then((d) => {
+      setMaxSecs(String(d.max_video_seconds))
+      setOriginal(d.max_video_seconds)
+      setDefaultSecs(d.max_video_seconds_default)
+      setLoaded(true)
+    }).catch((e) => setError(e.message))
+  }, [])
+
+  const dirty = loaded && Number(maxSecs) !== Number(original)
+
+  const save = async () => {
+    setSaving(true); setError(null); setSavedAt(null)
+    try {
+      const v = maxSecs.trim() === '' ? null : Number(maxSecs)
+      const d = await api('/admin/settings', { method: 'PATCH', body: { max_video_seconds: v } })
+      setMaxSecs(String(d.max_video_seconds))
+      setOriginal(d.max_video_seconds)
+      setSavedAt(Date.now())
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
+      <div className="text-sm font-semibold text-slate-800 mb-3">Site settings</div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+        <div>
+          <label className="block text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1">
+            Max video length (seconds)
+          </label>
+          <input
+            type="number"
+            min={10}
+            max={3600}
+            value={maxSecs}
+            disabled={!loaded || saving}
+            onChange={(e) => setMaxSecs(e.target.value)}
+            className="w-full sm:w-48 bg-white text-slate-900 rounded px-3 py-2 text-sm border border-slate-300 focus:border-slate-500 focus:outline-none font-mono"
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            Hard cap enforced server-side at upload time. Default from env:{' '}
+            <span className="font-mono">{defaultSecs ?? '…'}s</span>.
+            Range: 10–3600.
+          </p>
+        </div>
+        <button
+          onClick={save}
+          disabled={!dirty || saving}
+          className="text-sm px-4 py-2 rounded bg-[#7C3AED] text-white hover:bg-[#6D28D9] disabled:bg-slate-200 disabled:text-slate-400 font-semibold"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+
+      {savedAt && !error && (
+        <div className="text-xs text-emerald-600 mt-2">Saved.</div>
+      )}
+      {error && (
+        <div className="text-xs rounded px-3 py-2 mt-3 bg-rose-50 border border-rose-200 text-rose-700">
+          {error}
+        </div>
+      )}
     </div>
   )
 }
