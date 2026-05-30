@@ -57,7 +57,7 @@ export default function AdminPlans() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 pb-12">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 pb-12">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Plan Management</h2>
@@ -77,28 +77,44 @@ export default function AdminPlans() {
       {loading ? (
         <p className="text-slate-500 text-sm">Loading…</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-slate-500 uppercase tracking-wide text-xs">
-              <th className="py-2 pr-3 font-normal">Slug</th>
-              <th className="py-2 pr-3 font-normal">Name</th>
-              <th className="py-2 pr-3 font-normal">Description</th>
-              <th className="py-2 pr-3 font-normal">Credits</th>
-              <th className="py-2 pr-3 font-normal">Price (₹)</th>
-              <th className="py-2 pr-3 font-normal">Cadence</th>
-              <th className="py-2 pr-3 font-normal">Rollover</th>
-              <th className="py-2 pr-3 font-normal">Order</th>
-              <th className="py-2 pr-3 font-normal">Active</th>
-              <th className="py-2 pr-3 font-normal">Razorpay</th>
-              <th className="py-2 pr-3 font-normal"></th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          {/* Desktop: 11-column edit table. Hidden below md (768px) -- on
+              phones the table can't fit without horizontal scroll which is
+              brutal for editing inputs. */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500 uppercase tracking-wide text-xs">
+                  <th className="py-2 pr-3 font-normal">Slug</th>
+                  <th className="py-2 pr-3 font-normal">Name</th>
+                  <th className="py-2 pr-3 font-normal">Description</th>
+                  <th className="py-2 pr-3 font-normal">Credits</th>
+                  <th className="py-2 pr-3 font-normal">Price (₹)</th>
+                  <th className="py-2 pr-3 font-normal">Cadence</th>
+                  <th className="py-2 pr-3 font-normal">Rollover</th>
+                  <th className="py-2 pr-3 font-normal">Order</th>
+                  <th className="py-2 pr-3 font-normal">Active</th>
+                  <th className="py-2 pr-3 font-normal">Razorpay</th>
+                  <th className="py-2 pr-3 font-normal"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {plans.map((p) => (
+                  <PlanRow key={p.id} plan={p} onSaved={refresh} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: one editable card per plan. Stacked fields with labels
+              above so column headers aren't needed. Same handlers as the
+              desktop row -- different presentation only. */}
+          <div className="md:hidden space-y-3">
             {plans.map((p) => (
-              <PlanRow key={p.id} plan={p} onSaved={refresh} />
+              <PlanCard key={p.id} plan={p} onSaved={refresh} />
             ))}
-          </tbody>
-        </table>
+          </div>
+        </>
       )}
 
       <div className="mt-10 text-center">
@@ -284,5 +300,188 @@ function PlanRow({ plan, onSaved }) {
         </tr>
       )}
     </>
+  )
+}
+
+/**
+ * Mobile equivalent of <PlanRow>. Same draft state + save/sync handlers,
+ * different presentation: a stacked card with labels above each input so
+ * the 11-column table doesn't have to fit a 360px viewport.
+ */
+function PlanCard({ plan, onSaved }) {
+  const [draft, setDraft] = useState({
+    display_name: plan.display_name,
+    description: plan.description,
+    credits_granted: plan.credits_granted,
+    price_inr: plan.price_inr,
+    rollover_cap: plan.rollover_cap ?? '',
+    sort_order: plan.sort_order,
+    active: plan.active,
+  })
+  const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [rowError, setRowError] = useState(null)
+
+  const dirty = (
+    draft.display_name !== plan.display_name
+    || draft.description !== plan.description
+    || Number(draft.credits_granted) !== plan.credits_granted
+    || Number(draft.price_inr) !== plan.price_inr
+    || (draft.rollover_cap === '' ? null : Number(draft.rollover_cap)) !== plan.rollover_cap
+    || Number(draft.sort_order) !== plan.sort_order
+    || Boolean(draft.active) !== plan.active
+  )
+
+  const sync = async () => {
+    setSyncing(true); setRowError(null)
+    try {
+      await api(`/admin/plans/${plan.id}/sync-to-razorpay`, { method: 'POST' })
+      await onSaved()
+    } catch (e) {
+      setRowError(e.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const save = async () => {
+    setSaving(true); setRowError(null)
+    try {
+      await api(`/admin/plans/${plan.id}`, {
+        method: 'PATCH',
+        body: {
+          display_name: draft.display_name,
+          description: draft.description,
+          credits_granted: Number(draft.credits_granted),
+          price_inr_paise: Math.round(Number(draft.price_inr) * 100),
+          rollover_cap: draft.rollover_cap === '' ? null : Number(draft.rollover_cap),
+          sort_order: Number(draft.sort_order),
+          active: Boolean(draft.active),
+        },
+      })
+      await onSaved()
+    } catch (e) {
+      setRowError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = "w-full bg-white text-slate-900 rounded px-2 py-2 text-sm border border-slate-300 focus:border-slate-500 focus:outline-none"
+  const label = "block text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1"
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <span className="font-mono text-xs text-slate-600 truncate">{plan.slug}</span>
+        <span className="font-mono text-[10px] uppercase tracking-wide text-slate-400 flex-shrink-0">
+          {plan.cadence}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label className={label}>Name</label>
+          <input
+            value={draft.display_name}
+            onChange={(e) => setDraft({ ...draft, display_name: e.target.value })}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={label}>Description</label>
+          <input
+            value={draft.description}
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            className={inputCls}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={label}>Credits</label>
+            <input
+              type="number" min={0} inputMode="numeric"
+              value={draft.credits_granted}
+              onChange={(e) => setDraft({ ...draft, credits_granted: e.target.value })}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+          <div>
+            <label className={label}>Price (₹)</label>
+            <input
+              type="number" min={0} step="0.01" inputMode="decimal"
+              value={draft.price_inr}
+              onChange={(e) => setDraft({ ...draft, price_inr: e.target.value })}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+          <div>
+            <label className={label}>Rollover</label>
+            <input
+              type="number" min={0} inputMode="numeric"
+              value={draft.rollover_cap}
+              placeholder="—"
+              onChange={(e) => setDraft({ ...draft, rollover_cap: e.target.value })}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+          <div>
+            <label className={label}>Sort order</label>
+            <input
+              type="number" min={0} inputMode="numeric"
+              value={draft.sort_order}
+              onChange={(e) => setDraft({ ...draft, sort_order: e.target.value })}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={draft.active}
+            onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
+            className="w-4 h-4 accent-purple-500"
+          />
+          <span className="text-sm text-slate-700">Active (visible on /pricing)</span>
+        </label>
+
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100 gap-3">
+          <div className="flex items-center gap-2">
+            {plan.razorpay_plan_id ? (
+              <span className="text-[11px] text-emerald-600 font-mono" title={plan.razorpay_plan_id}>
+                ● synced
+              </span>
+            ) : (
+              <span className="text-[11px] text-slate-400">○ not synced</span>
+            )}
+            <button
+              onClick={sync}
+              disabled={syncing || (plan.razorpay_plan_id && plan.cadence === 'one_time')}
+              title={
+                plan.razorpay_plan_id && plan.cadence === 'one_time'
+                  ? 'One-time packs use a sentinel id; re-sync not required.'
+                  : 'Register this plan with Razorpay'
+              }
+              className="text-[11px] px-2 py-1 rounded border border-slate-300 text-slate-700 hover:text-slate-900 hover:border-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              {syncing ? '…' : plan.razorpay_plan_id ? 'Re-sync' : 'Sync'}
+            </button>
+          </div>
+          <button
+            onClick={save}
+            disabled={!dirty || saving}
+            className="text-sm px-4 py-1.5 rounded bg-[#7C3AED] text-white hover:bg-[#6D28D9] disabled:bg-slate-200 disabled:text-slate-400 font-semibold"
+          >
+            {saving ? '…' : 'Save'}
+          </button>
+        </div>
+
+        {rowError && (
+          <div className="text-xs rounded px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700">
+            {rowError}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
