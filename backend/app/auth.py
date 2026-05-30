@@ -122,6 +122,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 flush=True,
             )
 
+        # Welcome email. Fire-and-log -- a delivery failure should NEVER
+        # block the OAuth callback from returning. send_welcome_email is
+        # already a no-op when RESEND_API_KEY is unset (local dev), and
+        # wraps its own try/except so any transient HTTPX error logs but
+        # doesn't raise. We do await it so the user.first_name handling
+        # gets the right user object, but the worst case is a ~300ms
+        # added latency on first login -- acceptable.
+        from .email import send_welcome_email
+        full_name = getattr(user, "first_name", None) or getattr(user, "full_name", None)
+        await send_welcome_email(user.email, name=full_name)
+
     async def on_after_login(
         self,
         user: User,

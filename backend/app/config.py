@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # client-side success handler's HMAC signature instead.
     razorpay_webhook_secret: str | None = None  # env: RAZORPAY_WEBHOOK_SECRET
 
+    # Resend transactional email. RESEND_API_KEY drives sends; missing key
+    # turns email into a silent no-op (we still log the skip). RESEND_FROM
+    # is the verified sender address ("hello@vaacha.app") -- before the
+    # domain is verified in Resend, leave it blank and we fall back to
+    # the onboarding@resend.dev sandbox address.
+    resend_api_key: str | None = None         # env: RESEND_API_KEY
+    resend_from: str | None = None            # env: RESEND_FROM
+
 
 def get_settings() -> Settings:
     return Settings()
