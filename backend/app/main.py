@@ -673,14 +673,14 @@ async def upload(
     """
     is_byok = bool(x_user_asr_key)
     if not is_byok:
-        # Managed users: force Gemini 2.5 Flash server-side. Pro was 2-3x
-        # slower per second of audio (~50s for a 10s clip) and accuracy on
-        # short-form video was effectively identical to Flash. Flash brings
-        # us back to ~22-25s for a 60s clip, which is the perceived "fast"
-        # bar creators expect from a SaaS like this. BYOK users can still
-        # opt INTO Pro via the Settings modal.
+        # Managed users: force Gemini 2.5 Pro server-side. Tried Flash in
+        # Slice 11b for speed (3x faster) but its word-level timestamps
+        # drifted enough that subtitles came out visibly out of sync with
+        # the audio -- and sync IS the product. Reverted to Pro; if speed
+        # ever becomes a real complaint we'll surface a Fast/Accurate
+        # toggle on the upload page rather than choosing for the user.
         x_user_asr_provider = "gemini"
-        x_user_asr_model = "gemini-2.5-flash"
+        x_user_asr_model = "gemini-2.5-pro"
 
     # Validate credentials up front so the user fails fast — don't write the
     # file to disk if their key/provider combo is invalid.
