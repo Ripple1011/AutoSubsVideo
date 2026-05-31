@@ -19,9 +19,47 @@ const STEP_COARSE = 1.0
 // Below this you can't tell the sub apart from a flash.
 const MIN_DURATION = 0.05
 
+/**
+ * Rebuild the per-word array after a text edit so the canvas overlay AND
+ * the burn-in renderer (which both read .words when karaoke is on) reflect
+ * what the user typed -- not the original Gemini transcript.
+ *
+ * Time distribution: split the segment's duration into chunks proportional
+ * to each new token's character length. So "hello world" gets ~half-half,
+ * but "I understand" gets ~10% / ~90%. Same speaker / is_song carry over
+ * from the original segment so palette + song-mode behavior is preserved.
+ *
+ * Edge cases:
+ *   - Empty / whitespace-only text => return null so the canvas falls back
+ *     to rendering segment.text as a single block (no karaoke).
+ *   - Single token => one word spanning the whole segment.
+ *   - Total char count of 0 (whitespace only after tokenizing) => fall back
+ *     to even distribution.
+ */
+function retokenizeWords(segment, newText) {
+  const tokens = (newText || '').split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return null
+  const segStart = Number(segment.start) || 0
+  const segEnd = Number(segment.end) || segStart
+  const duration = Math.max(0, segEnd - segStart)
+  const carry = {
+    speaker: segment.speaker,
+    is_song: segment.is_song,
+  }
+  const totalChars = tokens.reduce((acc, t) => acc + t.length, 0) || tokens.length
+  let cursor = segStart
+  return tokens.map((text, i) => {
+    const share = (text.length || 1) / totalChars
+    const wEnd = i === tokens.length - 1 ? segEnd : Math.min(segEnd, cursor + duration * share)
+    const word = { text, start: cursor, end: wEnd, ...carry, phrase_end: i === tokens.length - 1 }
+    cursor = wEnd
+    return word
+  })
+}
+
 export default function SubtitleSidebar({ segments, originalSegments, activeIndex, onSelect, onEdit, style }) {
   const updateText = (i, text) => {
-    const next = segments.map((s, idx) => (idx === i ? { ...s, text } : s))
+    const next = segments.map((s, idx) => (idx === i ? { ...s, text, words: retokenizeWords(s, text) } : s))
     onEdit(next)
   }
 
